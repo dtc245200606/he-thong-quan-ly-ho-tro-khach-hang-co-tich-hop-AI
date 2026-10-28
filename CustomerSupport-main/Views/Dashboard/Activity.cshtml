@@ -1,0 +1,43 @@
+@model CustomerSupportAI.ViewModels.ActivityViewModel
+@{ ViewData["Title"] = "Hoạt động"; }
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Theo dõi trao đổi</span>
+        <h1>Hoạt động gần đây</h1>
+        <p class="page-subtitle">50 tin nhắn gần nhất trong các yêu cầu bạn được phép xem.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-secondary" asp-controller="Tickets" asp-action="Index"><icon name="ticket" />Xem yêu cầu</a>
+    </div>
+</header>
+<section class="card">
+    @if (Model.Messages.Count == 0)
+    {
+        <div class="empty-state">
+            <span class="empty-icon"><icon name="message-square" /></span>
+            <h3>Chưa có hoạt động</h3>
+            <p>Tin nhắn và phản hồi hỗ trợ sẽ xuất hiện tại đây.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="activity-list">
+            @foreach (var m in Model.Messages)
+            {
+                var team = m.Author.Role != UserRoles.Customer;
+                <li class="activity-item">
+                    <span class="avatar @(team ? "avatar-team" : "")">@m.Author.DisplayName[..1]</span>
+                    <div>
+                        <div class="activity-head">
+                            <strong>@m.Author.DisplayName</strong>
+                            @if (team) { <span class="badge badge-plain badge-sky">Đội ngũ hỗ trợ</span> }
+                            đã gửi tin nhắn trong <a asp-controller="Tickets" asp-action="Details" asp-route-id="@m.TicketId">@m.Ticket.TicketNumber</a>
+                        </div>
+                        <p>@(m.Body.Length > 180 ? m.Body[..180] + "…" : m.Body)</p>
+                        <small>@m.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")</small>
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</section>

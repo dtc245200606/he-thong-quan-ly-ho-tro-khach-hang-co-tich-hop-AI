@@ -1,0 +1,56 @@
+@model CustomerSupportAI.ViewModels.UserCreateViewModel
+@{
+    var isCustomers = Model.Portal == "Customers";
+    ViewData["Title"] = isCustomers ? "Thêm khách hàng" : "Thêm tài khoản";
+}
+
+<a class="back-link" asp-controller="@Model.Portal" asp-action="@(isCustomers ? "Index" : "Users")"><icon name="arrow-left" class="icon-sm" />@(isCustomers ? "Danh sách khách hàng" : "Tài khoản và quyền")</a>
+<div class="form-page">
+    <header class="page-header">
+        <div>
+            <span class="eyebrow">@(isCustomers ? "Quản lý khách hàng" : "Quản trị hệ thống")</span>
+            <h1>@(isCustomers ? "Thêm khách hàng" : "Thêm tài khoản")</h1>
+            <p class="page-subtitle">Tạo tài khoản với mật khẩu tạm thời và gửi cho người dùng qua kênh bảo mật.</p>
+        </div>
+    </header>
+    <form asp-controller="@Model.Portal" asp-action="Create" method="post" class="card card-body form-stack">
+        <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+        <div class="form-grid">
+            <div class="field">
+                <label class="field-label is-required" asp-for="DisplayName">Họ và tên</label>
+                <input asp-for="DisplayName" autocomplete="off" maxlength="100" placeholder="Nguyễn Minh Anh" />
+                <span asp-validation-for="DisplayName" class="field-error"></span>
+            </div>
+            <div class="field">
+                <label class="field-label is-required" asp-for="Email">Email</label>
+                <input asp-for="Email" autocomplete="off" placeholder="ten@congty.vn" />
+                <span asp-validation-for="Email" class="field-error"></span>
+            </div>
+        </div>
+        @if (Model.AllowedRoles.Count > 1)
+        {
+            <div class="field">
+                <label class="field-label is-required" asp-for="Role">Vai trò</label>
+                <select asp-for="Role">
+                    @foreach (var roleName in Model.AllowedRoles)
+                    {
+                        <option value="@roleName">@DisplayText.Role(roleName)</option>
+                    }
+                </select>
+                <span asp-validation-for="Role" class="field-error"></span>
+            </div>
+        }
+        <div class="field">
+            <label class="field-label is-required" asp-for="Password">Mật khẩu tạm thời</label>
+            <input asp-for="Password" autocomplete="new-password" placeholder="Ít nhất 10 ký tự" />
+            <span asp-validation-for="Password" class="field-error"></span>
+        </div>
+        <div class="form-actions">
+            <span>Hành động này được ghi vào nhật ký hoạt động.</span>
+            <div>
+                <a class="btn btn-secondary" asp-controller="@Model.Portal" asp-action="@(isCustomers ? "Index" : "Users")">Hủy</a>
+                <button class="btn btn-primary" type="submit"><icon name="user-plus" />Tạo tài khoản</button>
+            </div>
+        </div>
+    </form>
+</div>

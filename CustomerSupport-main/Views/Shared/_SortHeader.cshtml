@@ -1,0 +1,7 @@
+@model CustomerSupportAI.ViewModels.SortHeader
+<th scope="col" aria-sort="@Model.AriaSort">
+    <a class="sort-link @(Model.IsActive ? "is-active" : "")" href="@QueryUrl.With(Context.Request, ("sort", Model.Next), ("page", null))">
+        @Model.Label
+        <icon name="@(!Model.IsActive ? "arrow-up-down" : Model.IsDescending ? "arrow-down" : "arrow-up")" />
+    </a>
+</th>

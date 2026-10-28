@@ -1,0 +1,82 @@
+@model CustomerSupportAI.ViewModels.AuditLogViewModel
+@{
+    ViewData["Title"] = "Nhật ký hoạt động";
+    var actions = new (string Key, string Text, string Badge)[]
+    {
+        ("user.create", "Tạo tài khoản", "badge badge-success"),
+        ("user.update", "Cập nhật tài khoản", "badge badge-info"),
+        ("user.lock", "Khóa tài khoản", "badge badge-warning"),
+        ("user.unlock", "Mở khóa tài khoản", "badge badge-neutral"),
+        ("user.delete", "Xóa tài khoản", "badge badge-danger"),
+        ("user.password-reset-request", "Yêu cầu đặt lại mật khẩu", "badge badge-neutral"),
+        ("user.password-reset", "Đặt lại mật khẩu", "badge badge-warning"),
+        ("ticket.category", "Đổi danh mục yêu cầu", "badge badge-info"),
+        ("ai.ticket", "Dùng công cụ AI", "badge badge-sky"),
+    };
+    (string Text, string Badge) Describe(string action) =>
+        actions.Where(a => a.Key == action).Select(a => (a.Text, a.Badge)).FirstOrDefault() is { Text: not null } found
+            ? found : (action, "badge badge-neutral");
+}
+
+<a class="back-link" asp-action="Users"><icon name="arrow-left" class="icon-sm" />Tài khoản và quyền</a>
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Quản trị hệ thống</span>
+        <h1>Nhật ký hoạt động</h1>
+        <p class="page-subtitle">Mọi thao tác tạo, sửa, khóa, mở khóa và xóa tài khoản của quản trị viên và nhân viên.</p>
+    </div>
+</header>
+<section class="card">
+    <form class="table-toolbar" method="get" asp-action="AuditLog">
+        <select name="kind" aria-label="Lọc theo thao tác">
+            <option value="">Tất cả thao tác</option>
+            @foreach (var a in actions)
+            {
+                <option value="@a.Key" selected="@(Model.Action == a.Key ? "selected" : null)">@a.Text</option>
+            }
+        </select>
+        <button class="btn btn-secondary" type="submit"><icon name="filter" />Lọc</button>
+        @if (Model.Action.Length > 0)
+        {
+            <a class="btn btn-ghost" asp-action="AuditLog"><icon name="x" />Xóa bộ lọc</a>
+        }
+    </form>
+    @if (Model.Entries.Count == 0)
+    {
+        <div class="empty-state">
+            <span class="empty-icon"><icon name="history" /></span>
+            <h3>@(Model.Action.Length > 0 ? "Không có thao tác phù hợp" : "Chưa có hoạt động nào")</h3>
+            <p>Các thao tác tạo, sửa, khóa và xóa tài khoản sẽ được ghi lại tại đây.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Thời gian</th>
+                        <th scope="col">Người thực hiện</th>
+                        <th scope="col">Thao tác</th>
+                        <th scope="col">Đối tượng</th>
+                        <th scope="col">Chi tiết</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in Model.Entries)
+                    {
+                        var d = Describe(entry.Action);
+                        <tr>
+                            <td>@entry.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")</td>
+                            <td><strong class="text-strong">@entry.ActorName</strong></td>
+                            <td><span class="@d.Badge">@d.Text</span></td>
+                            <td>@entry.Target</td>
+                            <td>@entry.Detail</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <partial name="_Pagination" model="Model.Paging" />
+    }
+</section>

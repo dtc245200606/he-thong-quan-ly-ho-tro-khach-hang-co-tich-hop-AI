@@ -1,0 +1,37 @@
+@model CustomerSupportAI.Models.SupportUser
+@{ ViewData["Title"] = "Tài khoản"; }
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Không gian cá nhân</span>
+        <h1>Tài khoản của bạn</h1>
+        <p class="page-subtitle">Thông tin đăng nhập và bảo mật trong cùng một nơi.</p>
+    </div>
+</header>
+<div class="grid-main-aside profile-layout">
+    <section class="card" aria-labelledby="profile-info-title">
+        <div class="card-header"><h2 id="profile-info-title">Thông tin tài khoản</h2></div>
+        <div class="card-body">
+            <dl class="detail-list">
+                <div><dt>Họ và tên</dt><dd>@Model.DisplayName</dd></div>
+                <div><dt>Email đăng nhập</dt><dd>@Model.Email</dd></div>
+                <div><dt>Số điện thoại</dt><dd>@(Model.PhoneNumber ?? "Chưa cập nhật")</dd></div>
+                <div><dt>Vai trò</dt><dd><span class="@DisplayText.RoleBadge(Model.Role)">@DisplayText.Role(Model.Role)</span></dd></div>
+                <div><dt>Ngày tham gia</dt><dd>@Model.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy")</dd></div>
+            </dl>
+        </div>
+    </section>
+    <aside class="stack">
+        <section class="card profile-card">
+            <span class="avatar avatar-lg">@Model.DisplayName[..1].ToUpperInvariant()</span>
+            <h2>@Model.DisplayName</h2>
+            <span class="@DisplayText.RoleBadge(Model.Role)">@DisplayText.Role(Model.Role)</span>
+        </section>
+        <section class="card card-body">
+            <span class="kpi-icon"><icon name="key-round" /></span>
+            <h2 class="section-gap">Bảo vệ tài khoản</h2>
+            <p class="text-secondary">Dùng mật khẩu riêng cho tài khoản này. Không chia sẻ mật khẩu hoặc mã xác thực trong cuộc trò chuyện.</p>
+            <a class="btn btn-primary btn-block section-gap" asp-action="ChangePassword"><icon name="lock" />Đổi mật khẩu</a>
+            <a class="card-link section-gap" asp-controller="Knowledge" asp-action="Index" asp-route-search="tài khoản">Hướng dẫn về tài khoản <icon name="arrow-right" class="icon-sm" /></a>
+        </section>
+    </aside>
+</div>

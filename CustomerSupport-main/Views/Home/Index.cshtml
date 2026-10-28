@@ -1,0 +1,62 @@
+@{ ViewData["Title"] = "Hỗ trợ khách hàng"; }
+<div class="landing">
+    <section class="landing-hero">
+        <div>
+            <span class="hero-pill"><icon name="sparkles" class="icon-sm" />Kết nối để giải quyết</span>
+            <h1>Mọi câu hỏi.<br />Một nơi <em>giải đáp.</em></h1>
+            <p class="lead">Tra cứu hướng dẫn, nhận giải đáp từ trợ lý và kết nối đội ngũ hỗ trợ. Theo dõi từng yêu cầu rõ ràng, từ lúc gửi đến khi hoàn tất.</p>
+            <div class="hero-actions">
+                <a class="btn btn-primary btn-lg" asp-controller="Account" asp-action="Register">Tạo tài khoản khách hàng<icon name="arrow-right" /></a>
+                <a class="btn btn-secondary btn-lg" asp-controller="Knowledge" asp-action="Index"><icon name="book-open" />Khám phá hướng dẫn</a>
+            </div>
+            <div class="hero-benefits">
+                <span><icon name="circle-check" class="icon-sm" />Theo dõi trạng thái</span>
+                <span><icon name="circle-check" class="icon-sm" />Lịch sử trao đổi</span>
+                <span><icon name="circle-check" class="icon-sm" />Trợ lý thông minh</span>
+            </div>
+        </div>
+        <div class="hero-preview" aria-label="Quy trình hỗ trợ">
+            <div class="preview-bar">
+                <span class="bot-avatar"><icon name="headset" /></span>
+                <div><strong>Quy trình hỗ trợ</strong><small>Rõ ràng ở từng bước</small></div>
+            </div>
+            <ol class="preview-steps">
+                <li><span class="step-icon"><icon name="book-open" /></span><div><strong>Tự tra cứu</strong><span>Kho hướng dẫn theo chủ đề tài khoản, thanh toán, sản phẩm.</span></div></li>
+                <li><span class="step-icon"><icon name="sparkles" /></span><div><strong>Hỏi trợ lý</strong><span>Giải đáp theo ngữ cảnh, kèm nguồn tham khảo.</span></div></li>
+                <li><span class="step-icon"><icon name="ticket" /></span><div><strong>Gửi yêu cầu</strong><span>Nhân viên tiếp nhận, phản hồi và cập nhật trạng thái.</span></div></li>
+                <li><span class="step-icon"><icon name="circle-check" /></span><div><strong>Giải quyết</strong><span>Lưu lại toàn bộ lịch sử để tra cứu sau.</span></div></li>
+            </ol>
+        </div>
+    </section>
+    <section class="landing-section">
+        <span class="eyebrow">Một trải nghiệm thống nhất</span>
+        <h2>Chọn cách hỗ trợ phù hợp với bạn.</h2>
+        <div class="feature-grid">
+            <article class="card feature">
+                <span class="kpi-icon"><icon name="book-open" /></span>
+                <h3>Câu trả lời trong tầm tay</h3>
+                <p>Kho hướng dẫn được sắp xếp theo tài khoản, sản phẩm và yêu cầu hỗ trợ.</p>
+                <a class="card-link" asp-controller="Knowledge" asp-action="Index">Xem hướng dẫn <icon name="arrow-right" class="icon-sm" /></a>
+            </article>
+            <article class="card feature">
+                <span class="kpi-icon tone-sky"><icon name="sparkles" /></span>
+                <h3>Trao đổi theo ngữ cảnh</h3>
+                <p>Đặt câu hỏi, xem nguồn tham khảo và tiếp tục cuộc trò chuyện khi cần.</p>
+                <a class="card-link" asp-controller="Assistant" asp-action="Index">Hỏi trợ lý <icon name="arrow-right" class="icon-sm" /></a>
+            </article>
+            <article class="card feature">
+                <span class="kpi-icon tone-success"><icon name="headset" /></span>
+                <h3>Có người đồng hành</h3>
+                <p>Gửi yêu cầu chi tiết và theo dõi phản hồi từ đội ngũ chăm sóc khách hàng.</p>
+                <a class="card-link" asp-controller="Tickets" asp-action="Create">Gửi yêu cầu <icon name="arrow-right" class="icon-sm" /></a>
+            </article>
+        </div>
+    </section>
+    <section class="landing-cta">
+        <div>
+            <h2>Bắt đầu từ câu hỏi của bạn.</h2>
+            <p>Đăng ký để giữ mọi trao đổi hỗ trợ ở cùng một nơi.</p>
+        </div>
+        <a class="btn btn-light btn-lg" asp-controller="Account" asp-action="Register">Tạo tài khoản<icon name="arrow-right" /></a>
+    </section>
+</div>

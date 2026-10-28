@@ -1,0 +1,144 @@
+/*
+ * Design tokens: the single source of colour, type, spacing, radius, shadow and motion.
+ * Components in site.css read only these variables; change a theme here, not there.
+ * Documented in DESIGN_SYSTEM.md.
+ */
+:root {
+  color-scheme: light;
+
+  /* Brand ramp: navy primary, bright blue secondary */
+  --navy-950: #0b1630;
+  --navy-900: #0f1f3d;
+  --navy-800: #172b52;
+  --navy-700: #1e3a6e;
+  --blue-700: #1d4ed8;
+  --blue-600: #2563eb;
+  --blue-500: #3b82f6;
+  --blue-300: #93c5fd;
+  --blue-100: #dbeafe;
+  --blue-50: #eff6ff;
+  --sky-500: #0ea5e9;
+  --sky-100: #e0f2fe;
+
+  /* Neutrals */
+  --gray-900: #0f172a;
+  --gray-700: #334155;
+  --gray-600: #475569;
+  --gray-500: #5b6a80;
+  --gray-400: #94a3b8;
+  --gray-300: #cbd5e1;
+  --gray-200: #e2e8f0;
+  --gray-100: #eef2f7;
+  --gray-50: #f6f8fb;
+
+  /* Semantic colour */
+  --color-bg: var(--gray-50);
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-surface-hover: #f1f5f9;
+  --color-border: var(--gray-200);
+  --color-border-strong: var(--gray-300);
+  --color-border-input: #7f8ca1; /* 3.4:1 on white, WCAG 1.4.11 */
+  --color-text: var(--gray-900);
+  --color-text-secondary: var(--gray-600);
+  --color-text-muted: var(--gray-500);
+  --color-text-inverse: #ffffff;
+
+  --color-primary: var(--blue-600);
+  --color-primary-hover: var(--blue-700);
+  --color-primary-soft: var(--blue-50);
+  --color-primary-soft-strong: var(--blue-100);
+  --color-secondary: var(--sky-500);
+  --color-secondary-soft: var(--sky-100);
+  --color-brand: var(--navy-900);
+
+  --color-success: #15803d;
+  --color-success-soft: #ecfdf3;
+  --color-warning: #b45309;
+  --color-warning-soft: #fff7e6;
+  --color-danger: #c42b2b;
+  --color-danger-hover: #a51f1f;
+  --color-danger-soft: #fef2f2;
+  --color-info: var(--blue-700);
+  --color-info-soft: var(--blue-50);
+
+  /* Sidebar (dark navy surface) */
+  --sidebar-bg: var(--navy-900);
+  --sidebar-border: rgba(255, 255, 255, .08);
+  --sidebar-text: #c9d4e6;
+  --sidebar-text-muted: #8c9cba;
+  --sidebar-hover: rgba(255, 255, 255, .06);
+  --sidebar-active: rgba(96, 165, 250, .16);
+  --sidebar-accent: #60a5fa;
+
+  /* Data visualisation: one validated series colour, recessive grid */
+  --chart-series: var(--blue-600);
+  --chart-series-soft: rgba(37, 99, 235, .1);
+  --chart-grid: var(--gray-200);
+
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, .35);
+  --focus-ring-strong: 0 0 0 2px #ffffff, 0 0 0 4px var(--blue-600);
+
+  /* Typography */
+  --font-sans: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.875rem; /* 14px: dense app UI */
+  --text-md: 1rem;       /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 1.875rem;  /* 30px */
+  --text-4xl: 2.5rem;    /* 40px */
+  --leading-tight: 1.25;
+  --leading-normal: 1.55;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Spacing: 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, .05);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, .07), 0 1px 2px rgba(15, 23, 42, .04);
+  --shadow-md: 0 6px 16px -4px rgba(15, 23, 42, .1), 0 2px 6px -2px rgba(15, 23, 42, .06);
+  --shadow-lg: 0 18px 40px -12px rgba(15, 23, 42, .22);
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+
+  /* Layout */
+  --sidebar-width: 256px;
+  --sidebar-width-collapsed: 72px;
+  --topbar-height: 60px;
+  --content-max: 1440px;
+  --z-sticky: 20;
+  --z-sidebar: 40;
+  --z-dropdown: 50;
+  --z-toast: 70;
+
+  /* Breakpoints (CSS variables cannot be used inside @media; keep in sync):
+     sm 640px · md 768px · lg 1024px · xl 1280px */
+}

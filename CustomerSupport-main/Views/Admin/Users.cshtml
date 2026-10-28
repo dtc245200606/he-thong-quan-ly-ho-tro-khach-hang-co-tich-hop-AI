@@ -1,0 +1,116 @@
+@model CustomerSupportAI.ViewModels.AdminUsersViewModel
+@{
+    ViewData["Title"] = "Tài khoản và quyền";
+    var filtered = Model.Search.Length > 0 || Model.Role.Length > 0;
+}
+
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Quản trị hệ thống</span>
+        <h1>Tài khoản và quyền</h1>
+        <p class="page-subtitle">Xem, thêm, sửa, khóa và xóa tài khoản quản trị, nhân viên và khách hàng.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-secondary" asp-action="AuditLog"><icon name="history" />Nhật ký hoạt động</a>
+        <a class="btn btn-primary" asp-action="Create"><icon name="user-plus" />Thêm tài khoản</a>
+    </div>
+</header>
+<div class="grid-main-aside">
+    <section class="card" aria-labelledby="users-title">
+        <div class="card-header">
+            <div><h2 id="users-title">Tài khoản</h2><p class="card-subtitle">Tìm theo tên hoặc email, lọc theo vai trò.</p></div>
+        </div>
+        <form class="table-toolbar" method="get" asp-action="Users" role="search">
+            <input type="hidden" name="sort" value="@(Model.Sort == "id" ? null : Model.Sort)" />
+            <label class="input-group">
+                <icon name="search" />
+                <span class="visually-hidden">Tìm tài khoản</span>
+                <input name="search" type="search" value="@Model.Search" placeholder="Tìm tên hoặc email" />
+            </label>
+            <select name="role" aria-label="Lọc theo vai trò">
+                <option value="">Tất cả vai trò</option>
+                @foreach (var roleName in UserRoles.All)
+                {
+                    <option value="@roleName" selected="@(Model.Role == roleName ? "selected" : null)">@DisplayText.Role(roleName)</option>
+                }
+            </select>
+            <button class="btn btn-secondary" type="submit"><icon name="filter" />Lọc</button>
+            @if (filtered)
+            {
+                <a class="btn btn-ghost" asp-action="Users"><icon name="x" />Xóa bộ lọc</a>
+            }
+        </form>
+        @if (Model.Users.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon"><icon name="search" /></span>
+                <h3>Không có tài khoản phù hợp</h3>
+                <p>Hãy thử thay đổi từ khóa hoặc bộ lọc vai trò.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <partial name="_SortHeader" model='new SortHeader("Người dùng", "name", Model.Sort)' />
+                            <partial name="_SortHeader" model='new SortHeader("Vai trò", "role", Model.Sort)' />
+                            <th scope="col">Trạng thái</th>
+                            <th scope="col" class="num">Yêu cầu</th>
+                            <partial name="_SortHeader" model='new SortHeader("Ngày tham gia", "id", Model.Sort)' />
+                            <th scope="col"><span class="visually-hidden">Thao tác</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.Users)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="person">
+                                        <span class="avatar avatar-sm">@item.User.DisplayName[..1].ToUpperInvariant()</span>
+                                        <div class="cell-main"><a asp-action="Details" asp-route-id="@item.User.Id">@item.User.DisplayName</a><span class="cell-sub">@item.User.Email</span></div>
+                                    </div>
+                                </td>
+                                <td><span class="@DisplayText.RoleBadge(item.User.Role)">@DisplayText.Role(item.User.Role)</span></td>
+                                <td><span class="badge @(item.User.IsActive ? "badge-success" : "badge-danger")">@(item.User.IsActive ? "Hoạt động" : "Đã khóa")</span></td>
+                                <td class="num">@item.TicketCount</td>
+                                <td>@item.User.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy")</td>
+                                <td class="actions">
+                                    <div class="row-actions">
+                                        <a class="btn btn-ghost btn-icon btn-sm" asp-action="Details" asp-route-id="@item.User.Id" aria-label="Xem @item.User.DisplayName" title="Xem"><icon name="eye" class="icon-sm" /></a>
+                                        <a class="btn btn-ghost btn-icon btn-sm" asp-action="Edit" asp-route-id="@item.User.Id" aria-label="Sửa @item.User.DisplayName" title="Sửa"><icon name="pencil" class="icon-sm" /></a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <partial name="_Pagination" model="Model.Paging" />
+        }
+    </section>
+    <aside class="card" aria-labelledby="quick-staff-title">
+        <div class="card-header"><div><h2 id="quick-staff-title">Thêm nhanh nhân viên</h2><p class="card-subtitle">Nhân viên xử lý yêu cầu và quản lý khách hàng.</p></div></div>
+        <form asp-action="CreateStaff" method="post" class="card-body form-stack">
+            <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+            <div class="field">
+                <label class="field-label is-required" asp-for="NewStaff.DisplayName">Họ và tên</label>
+                <input asp-for="NewStaff.DisplayName" autocomplete="name" placeholder="Nguyễn Minh Anh" />
+                <span asp-validation-for="NewStaff.DisplayName" class="field-error"></span>
+            </div>
+            <div class="field">
+                <label class="field-label is-required" asp-for="NewStaff.Email">Email công việc</label>
+                <input asp-for="NewStaff.Email" autocomplete="email" placeholder="nhanvien@congty.vn" />
+                <span asp-validation-for="NewStaff.Email" class="field-error"></span>
+            </div>
+            <div class="field">
+                <label class="field-label is-required" asp-for="NewStaff.TemporaryPassword">Mật khẩu tạm thời</label>
+                <input asp-for="NewStaff.TemporaryPassword" autocomplete="new-password" placeholder="Ít nhất 10 ký tự" />
+                <span asp-validation-for="NewStaff.TemporaryPassword" class="field-error"></span>
+            </div>
+            <button class="btn btn-primary btn-block" type="submit"><icon name="user-plus" />Tạo tài khoản nhân viên</button>
+            <span class="field-hint">Gửi mật khẩu tạm thời qua kênh bảo mật. Dùng "Thêm tài khoản" để tạo quản trị viên hoặc khách hàng.</span>
+        </form>
+    </aside>
+</div>

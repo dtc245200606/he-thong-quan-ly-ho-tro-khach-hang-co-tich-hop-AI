@@ -1,0 +1,41 @@
+@model CustomerSupportAI.Models.KnowledgeArticle
+@{ ViewData["Title"] = Model.Id == 0 ? "Viết hướng dẫn" : "Sửa hướng dẫn"; }
+<a class="back-link" asp-action="Index"><icon name="arrow-left" class="icon-sm" />Kho hướng dẫn</a>
+<div class="form-page">
+    <header class="page-header">
+        <div>
+            <span class="eyebrow">Nội dung hỗ trợ</span>
+            <h1>@(Model.Id == 0 ? "Viết hướng dẫn mới" : "Sửa hướng dẫn")</h1>
+            <p class="page-subtitle">Nội dung đã lưu sẽ được công khai và dùng làm nguồn trả lời cho trợ lý.</p>
+        </div>
+    </header>
+    <form class="card card-body form-stack" method="post">
+        <div asp-validation-summary="All" class="validation-summary"></div>
+        <input asp-for="Id" type="hidden" />
+        <div class="field">
+            <label class="field-label is-required" asp-for="Title">Tiêu đề</label>
+            <input asp-for="Title" maxlength="160" placeholder="Ví dụ: Cách đổi mật khẩu tài khoản" />
+        </div>
+        <div class="field">
+            <label class="field-label is-required" asp-for="Category">Danh mục</label>
+            <input asp-for="Category" maxlength="60" list="article-categories" placeholder="Chọn hoặc nhập danh mục" />
+            <datalist id="article-categories">
+                @foreach (var c in new[] { "Bắt đầu", "Tài khoản", "Yêu cầu hỗ trợ", "Thanh toán", "Sản phẩm", "Trợ lý" })
+                {
+                    <option value="@c"></option>
+                }
+            </datalist>
+        </div>
+        <div class="field">
+            <label class="field-label is-required" asp-for="Body">Nội dung hướng dẫn</label>
+            <textarea asp-for="Body" rows="14" maxlength="6000" placeholder="Viết từng bước rõ ràng. Tối đa 6.000 ký tự."></textarea>
+        </div>
+        <div class="form-actions">
+            <span>Bài viết hiển thị công khai ngay sau khi lưu.</span>
+            <div>
+                <a class="btn btn-secondary" asp-action="Index">Hủy</a>
+                <button class="btn btn-primary" type="submit"><icon name="check" />Lưu hướng dẫn</button>
+            </div>
+        </div>
+    </form>
+</div>

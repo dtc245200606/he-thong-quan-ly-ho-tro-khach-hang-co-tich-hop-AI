@@ -1,0 +1,108 @@
+@model CustomerSupportAI.ViewModels.UserDetailsViewModel
+@{
+    var account = Model.User;
+    var isCustomers = Model.Portal == "Customers";
+    ViewData["Title"] = account.DisplayName;
+    var local = TimeSpan.FromHours(7);
+}
+
+<a class="back-link" asp-controller="@Model.Portal" asp-action="@(isCustomers ? "Index" : "Users")"><icon name="arrow-left" class="icon-sm" />@(isCustomers ? "Danh sách khách hàng" : "Tài khoản và quyền")</a>
+<header class="page-header">
+    <div class="person">
+        <span class="avatar avatar-lg">@account.DisplayName[..1].ToUpperInvariant()</span>
+        <div>
+            <span class="eyebrow">@(isCustomers ? "Hồ sơ khách hàng" : "Hồ sơ tài khoản")</span>
+            <h1>@account.DisplayName</h1>
+            <div class="ticket-meta">
+                <span class="@DisplayText.RoleBadge(account.Role)">@DisplayText.Role(account.Role)</span>
+                <span class="badge @(account.IsActive ? "badge-success" : "badge-danger")">@(account.IsActive ? "Hoạt động" : "Đã khóa")</span>
+                @if (Model.IsSelf) { <span>Đây là tài khoản của bạn</span> }
+            </div>
+        </div>
+    </div>
+    <div class="page-actions">
+        @if (!Model.IsSelf)
+        {
+            <form asp-controller="@Model.Portal" asp-action="SetActive" asp-route-id="@account.Id" method="post"
+                  data-confirm="@(account.IsActive ? "Người dùng sẽ bị đăng xuất ngay và không thể đăng nhập cho đến khi được mở khóa." : "Người dùng có thể đăng nhập lại sau khi mở khóa.")"
+                  data-confirm-title="@(account.IsActive ? "Khóa tài khoản này?" : "Mở khóa tài khoản này?")"
+                  data-confirm-label="@(account.IsActive ? "Khóa tài khoản" : "Mở khóa")" data-confirm-tone="warning">
+                <input type="hidden" name="active" value="@(account.IsActive ? "false" : "true")" />
+                <button class="btn btn-secondary" type="submit"><icon name="@(account.IsActive ? "lock" : "lock-open")" />@(account.IsActive ? "Khóa tài khoản" : "Mở khóa")</button>
+            </form>
+        }
+        <a class="btn btn-primary" asp-controller="@Model.Portal" asp-action="Edit" asp-route-id="@account.Id"><icon name="pencil" />Sửa thông tin</a>
+    </div>
+</header>
+
+<section class="kpi-grid kpi-3" aria-label="Thống kê tài khoản">
+    <article class="kpi"><div class="kpi-top"><span class="kpi-label">Số yêu cầu</span><span class="kpi-icon"><icon name="ticket" /></span></div><div class="kpi-value">@Model.TicketCount</div></article>
+    <article class="kpi"><div class="kpi-top"><span class="kpi-label">Phản hồi đã gửi</span><span class="kpi-icon tone-success"><icon name="message-square" /></span></div><div class="kpi-value">@Model.MessageCount</div></article>
+    <article class="kpi"><div class="kpi-top"><span class="kpi-label">Lượt hỏi trợ lý</span><span class="kpi-icon tone-sky"><icon name="bot" /></span></div><div class="kpi-value">@Model.ConversationCount</div></article>
+</section>
+
+<div class="grid-main-aside">
+    <div class="stack">
+        <section class="card" aria-labelledby="recent-tickets-title">
+            <div class="card-header">
+                <div><h2 id="recent-tickets-title">Yêu cầu hỗ trợ gần đây</h2><p class="card-subtitle">Tối đa 10 yêu cầu mới nhất của tài khoản này.</p></div>
+                @if (account.Role == UserRoles.Customer && Model.TicketCount > 0)
+                {
+                    <a class="card-link" asp-controller="Tickets" asp-action="Index" asp-route-customerId="@account.Id">Xem tất cả @Model.TicketCount yêu cầu<icon name="chevron-right" class="icon-sm" /></a>
+                }
+            </div>
+            @if (Model.RecentTickets.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon"><icon name="inbox" /></span>
+                    <h3>Chưa có yêu cầu nào</h3>
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th scope="col">Yêu cầu</th><th scope="col">Danh mục</th><th scope="col">Trạng thái</th><th scope="col">Cập nhật</th></tr></thead>
+                        <tbody>
+                            @foreach (var ticket in Model.RecentTickets)
+                            {
+                                <tr>
+                                    <td><div class="cell-main"><a asp-controller="Tickets" asp-action="Details" asp-route-id="@ticket.Id">@ticket.Subject</a><span class="ticket-code">@ticket.TicketNumber</span></div></td>
+                                    <td>@DisplayText.TicketCategory(ticket.Category)</td>
+                                    <td><span class="@DisplayText.TicketStatusBadge(ticket.Status)">@DisplayText.TicketStatus(ticket.Status)</span></td>
+                                    <td>@ticket.UpdatedAt.ToOffset(local).ToString("dd/MM/yyyy")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+        @if (!Model.IsSelf)
+        {
+            <section class="danger-zone" aria-labelledby="danger-title">
+                <div>
+                    <h2 id="danger-title">Xóa tài khoản</h2>
+                    <p>Xóa vĩnh viễn tài khoản cùng các yêu cầu hỗ trợ và hội thoại trợ lý của tài khoản này. Thao tác không thể hoàn tác. Nếu chỉ muốn ngăn đăng nhập, hãy khóa tài khoản.</p>
+                </div>
+                <form asp-controller="@Model.Portal" asp-action="Delete" asp-route-id="@account.Id" method="post"
+                      data-confirm="Tài khoản @account.Email cùng các yêu cầu và hội thoại liên quan sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác."
+                      data-confirm-title="Xóa vĩnh viễn tài khoản?" data-confirm-label="Xóa tài khoản">
+                    <button class="btn btn-danger" type="submit"><icon name="trash-2" />Xóa tài khoản</button>
+                </form>
+            </section>
+        }
+    </div>
+    <aside class="card" aria-labelledby="account-info-title">
+        <div class="card-header"><h2 id="account-info-title">Thông tin tài khoản</h2></div>
+        <div class="card-body">
+            <dl class="detail-list">
+                <div><dt>Họ và tên</dt><dd>@account.DisplayName</dd></div>
+                <div><dt>Email</dt><dd>@account.Email</dd></div>
+                <div><dt>Số điện thoại</dt><dd>@(account.PhoneNumber ?? "Chưa cập nhật")</dd></div>
+                <div><dt>Vai trò</dt><dd>@DisplayText.Role(account.Role)</dd></div>
+                <div><dt>Ngày tham gia</dt><dd>@account.CreatedAt.ToOffset(local).ToString("dd/MM/yyyy HH:mm")</dd></div>
+            </dl>
+        </div>
+    </aside>
+</div>

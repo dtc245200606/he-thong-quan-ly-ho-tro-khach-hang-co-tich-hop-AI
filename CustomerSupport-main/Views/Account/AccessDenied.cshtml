@@ -1,0 +1,10 @@
+@{
+    ViewData["Title"] = "Không đủ quyền truy cập";
+}
+<section class="card empty-state state-page">
+    <span class="empty-icon tone-warning"><icon name="lock" /></span>
+    <span class="eyebrow">403 · Không đủ quyền</span>
+    <h1>Bạn chưa được cấp quyền truy cập.</h1>
+    <p>Tài khoản hiện tại không có quyền xem trang này. Nếu bạn cho rằng đây là nhầm lẫn, hãy liên hệ quản trị viên.</p>
+    <a class="btn btn-primary" asp-controller="Dashboard" asp-action="Index"><icon name="layout-dashboard" />Về trang tổng quan</a>
+</section>

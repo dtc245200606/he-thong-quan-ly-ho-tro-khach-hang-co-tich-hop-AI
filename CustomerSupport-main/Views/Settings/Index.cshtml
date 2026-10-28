@@ -1,0 +1,49 @@
+@model CustomerSupportAI.Services.AiSettingsForm
+@{ ViewData["Title"] = "Cấu hình AI"; }
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Quản trị tích hợp</span>
+        <h1>Cấu hình trợ lý AI</h1>
+        <p class="page-subtitle">Kết nối Gemini với kho hướng dẫn và cuộc hội thoại của khách hàng.</p>
+    </div>
+    <span class="mode-pill @(Model.HasKey ? "is-ai" : "")"><span class="dot"></span>@(Model.HasKey ? "Đã cấu hình API key" : "Chưa có API key")</span>
+</header>
+<div class="grid-main-aside">
+    <section class="card" aria-labelledby="gemini-title">
+        <div class="card-header"><div><h2 id="gemini-title">Kết nối Gemini</h2><p class="card-subtitle">Key được mã hóa trên máy chủ và không hiển thị lại.</p></div></div>
+        <form class="card-body form-stack" method="post">
+            <div asp-validation-summary="All" class="validation-summary"></div>
+            <div class="field">
+                <label class="field-label is-required" asp-for="Model">Model</label>
+                <input asp-for="Model" placeholder="Ví dụ: gemini-3.8-flash" />
+                <span class="field-hint">Tên model mà API key của bạn được cấp quyền sử dụng.</span>
+            </div>
+            <div class="field">
+                <label class="field-label" asp-for="ApiKey">API key mới</label>
+                <input asp-for="ApiKey" type="password" autocomplete="new-password" placeholder="Để trống để giữ key hiện tại" />
+                <span class="field-hint">Lấy key tại Google AI Studio. Để trống nếu không muốn thay đổi.</span>
+            </div>
+            <label class="check"><input asp-for="RemoveKey" /> <span>Ngắt kết nối AI và chỉ dùng kho hướng dẫn</span></label>
+            <div class="form-actions">
+                <span>Lưu trước, sau đó kiểm tra kết nối thực tế.</span>
+                <div><button class="btn btn-primary" type="submit"><icon name="check" />Lưu cấu hình</button></div>
+            </div>
+        </form>
+        <form asp-action="Test" method="post" class="card-footer">
+            <span class="cell-sub">Gửi một yêu cầu thử đến Gemini bằng cấu hình đã lưu.</span>
+            <button class="btn btn-secondary" type="submit"><icon name="refresh-cw" />Kiểm tra kết nối thực tế</button>
+        </form>
+    </section>
+    <section class="card card-body">
+        <span class="eyebrow">Cách hoạt động</span>
+        <h2>Trả lời có cơ sở</h2>
+        <ol class="steps-list">
+            <li>Lấy API key tại <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio <icon name="external-link" class="icon-sm inline-icon" /></a>.</li>
+            <li>Nhập key, tên model được cấp quyền và lưu cấu hình.</li>
+            <li>Kiểm tra kết nối, sau đó thử câu hỏi ở trang Trợ lý.</li>
+        </ol>
+        <p class="text-secondary">AI nhận câu hỏi, tối đa 6 lượt hội thoại gần đây, hướng dẫn liên quan và tóm tắt yêu cầu của chính khách hàng.</p>
+        <div class="alert alert-info section-gap"><icon name="info" /><span>Khi thiếu key hoặc nhà cung cấp gặp lỗi, hệ thống tự chuyển sang tra cứu kho hướng dẫn và hiển thị rõ chế độ này.</span></div>
+        <a class="card-link section-gap" asp-controller="Knowledge" asp-action="Index">Quản lý kho hướng dẫn <icon name="arrow-right" class="icon-sm" /></a>
+    </section>
+</div>

@@ -1,0 +1,91 @@
+@model CustomerSupportAI.ViewModels.AssistantPageViewModel
+@{ ViewData["Title"] = "Trợ lý thông minh"; }
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Giải đáp theo ngữ cảnh</span>
+        <h1>Trợ lý thông minh</h1>
+        <p class="page-subtitle">Hỏi, tra cứu và chuyển sang nhân viên khi cần hỗ trợ thêm.</p>
+    </div>
+    <span class="mode-pill @(Model.IsConfigured ? "is-ai" : "")"><span class="dot"></span><span id="assistant-mode">@(Model.IsConfigured ? "AI đã cấu hình · chờ phản hồi" : "Tra cứu kho hướng dẫn · chưa kết nối AI")</span></span>
+</header>
+<div class="chat-layout">
+    <section class="card chat-panel assistant-workspace" data-endpoint="@Url.Action("Ask", "Assistant")" aria-label="Khung trò chuyện">
+        <div class="chat-header">
+            <span class="bot-avatar"><icon name="bot" /></span>
+            <div class="chat-header-text">
+                <strong>CustomerSupport Assistant</strong>
+                <span>Nguồn hướng dẫn rõ ràng · lịch sử riêng tư</span>
+            </div>
+            <form asp-action="Clear" method="post" data-confirm="Toàn bộ lịch sử trò chuyện của bạn với trợ lý sẽ bị xóa." data-confirm-title="Bắt đầu hội thoại mới?" data-confirm-label="Xóa và bắt đầu" data-confirm-tone="warning">
+                <button class="btn btn-secondary btn-sm" type="submit"><icon name="refresh-cw" class="icon-sm" />Hội thoại mới</button>
+            </form>
+        </div>
+        <div class="chat-messages" id="assistant-messages" aria-live="polite" aria-label="Nội dung trò chuyện">
+            <div class="chat-message chat-assistant">
+                <span class="bot-avatar sm"><icon name="bot" /></span>
+                <div class="chat-bubble chat-greeting">
+                    <strong>Xin chào, @User.Identity?.Name</strong>
+                    Tôi có thể hướng dẫn sử dụng hệ thống, tra cứu yêu cầu của bạn và tìm thông tin hỗ trợ. Bạn đang gặp vấn đề gì?
+                </div>
+            </div>
+            @foreach (var turn in Model.History)
+            {
+                <div class="chat-message chat-user">
+                    <div class="chat-bubble">@turn.Question</div>
+                </div>
+                <div class="chat-message chat-assistant">
+                    <span class="bot-avatar sm"><icon name="bot" /></span>
+                    <div>
+                        <div class="chat-bubble" data-md>
+                            <span class="reply-mode">@(turn.Mode == "ai" ? "AI · Gemini" : "Kho hướng dẫn")</span>
+                            <div class="reply-text">@turn.Reply</div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        <form id="assistant-csrf" class="visually-hidden">@Html.AntiForgeryToken()</form>
+        <div class="prompt-chips" aria-label="Câu hỏi gợi ý">
+            <button class="chip" type="button" data-prompt="Làm thế nào để tạo yêu cầu hỗ trợ?"><icon name="plus" />Tạo yêu cầu</button>
+            <button class="chip" type="button" data-prompt="Trạng thái yêu cầu của tôi là gì?"><icon name="clock" />Theo dõi trạng thái</button>
+            <button class="chip" type="button" data-prompt="Tôi gặp vấn đề đăng nhập tài khoản"><icon name="key-round" />Hỗ trợ tài khoản</button>
+        </div>
+        <form id="assistant-form" class="composer">
+            <label class="visually-hidden" for="assistant-input">Câu hỏi của bạn</label>
+            <textarea id="assistant-input" rows="1" maxlength="2000" placeholder="Mô tả vấn đề bạn cần hỗ trợ…" required></textarea>
+            <button id="assistant-send" class="btn btn-primary" type="submit"><icon name="send" /><span class="send-label">Gửi</span></button>
+        </form>
+        <div class="chat-disclaimer">
+            <span>AI có thể sai. Không gửi mật khẩu, OTP hoặc thông tin thẻ.</span>
+            <span><span class="kbd">Enter</span> để gửi · <span class="kbd">Shift</span> + <span class="kbd">Enter</span> xuống dòng</span>
+        </div>
+    </section>
+    <aside class="stack" aria-label="Thông tin hỗ trợ">
+        <section class="card">
+            <div class="card-header"><div><h2>Hướng dẫn liên quan</h2><p class="card-subtitle">Nguồn được dùng cho câu trả lời</p></div></div>
+            <div class="card-body">
+                <div id="assistant-sources" class="source-list">
+                    <p class="muted">Nguồn hướng dẫn phù hợp sẽ xuất hiện sau câu trả lời.</p>
+                </div>
+            </div>
+            <div class="card-footer"><a class="card-link" asp-controller="Knowledge" asp-action="Index">Mở kho hướng dẫn <icon name="arrow-right" class="icon-sm" /></a></div>
+        </section>
+        <section class="card card-body handoff-card">
+            <span class="kpi-icon tone-success"><icon name="headset" /></span>
+            <h2>Cần người hỗ trợ?</h2>
+            <p class="text-secondary">Chuyển 3 lượt trao đổi gần nhất thành yêu cầu để nhân viên tiếp tục hỗ trợ.</p>
+            @if (User.IsInRole(UserRoles.Customer))
+            {
+                <form asp-action="Handoff" method="post">
+                    <button class="btn btn-primary btn-block" type="submit"><icon name="user-plus" />Chuyển nhân viên</button>
+                </form>
+            }
+            else
+            {
+                <a class="btn btn-secondary btn-block" asp-controller="Tickets" asp-action="Index"><icon name="inbox" />Mở hàng đợi</a>
+            }
+        </section>
+        <p class="field-hint"><icon name="info" class="icon-sm inline-icon" /> Khi dùng AI, câu hỏi, hội thoại gần đây và tóm tắt yêu cầu của bạn được gửi đến Gemini để tạo câu trả lời.</p>
+    </aside>
+</div>
+@section Scripts{<script src="~/js/assistant.js" asp-append-version="true"></script>}

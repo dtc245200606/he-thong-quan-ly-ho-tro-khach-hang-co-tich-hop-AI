@@ -1,0 +1,44 @@
+@model CustomerSupportAI.ViewModels.PageInfo
+@{
+    // Window of up to five page numbers around the current page.
+    var start = Math.Max(1, Math.Min(Model.Page - 2, Model.TotalPages - 4));
+    var end = Math.Min(Model.TotalPages, start + 4);
+}
+@if (Model.TotalItems > 0)
+{
+<nav class="pagination" aria-label="Phân trang">
+    <span class="pagination-summary">Hiển thị <strong>@Model.FirstItem–@Model.LastItem</strong> trong <strong>@Model.TotalItems</strong></span>
+    @if (Model.TotalPages > 1)
+    {
+    <div class="pagination-pages">
+        @if (Model.Page > 1)
+        {
+            <a class="page-link" href="@QueryUrl.With(Context.Request, ("page", (Model.Page - 1).ToString()))" aria-label="Trang trước"><icon name="chevron-left" /></a>
+        }
+        else
+        {
+            <span class="page-link is-disabled" aria-hidden="true"><icon name="chevron-left" /></span>
+        }
+        @for (var number = start; number <= end; number++)
+        {
+            if (number == Model.Page)
+            {
+                <span class="page-link is-current" aria-current="page">@number</span>
+            }
+            else
+            {
+                <a class="page-link" href="@QueryUrl.With(Context.Request, ("page", number == 1 ? null : number.ToString()))" aria-label="Trang @number">@number</a>
+            }
+        }
+        @if (Model.Page < Model.TotalPages)
+        {
+            <a class="page-link" href="@QueryUrl.With(Context.Request, ("page", (Model.Page + 1).ToString()))" aria-label="Trang sau"><icon name="chevron-right" /></a>
+        }
+        else
+        {
+            <span class="page-link is-disabled" aria-hidden="true"><icon name="chevron-right" /></span>
+        }
+    </div>
+    }
+</nav>
+}

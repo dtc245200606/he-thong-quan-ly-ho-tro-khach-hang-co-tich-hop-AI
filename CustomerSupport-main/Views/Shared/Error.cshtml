@@ -1,0 +1,16 @@
+@model ErrorViewModel
+@{
+    ViewData["Title"] = "Đã xảy ra lỗi";
+}
+
+<section class="card empty-state state-page">
+    <span class="empty-icon tone-danger"><icon name="triangle-alert" /></span>
+    <span class="eyebrow">Có lỗi xảy ra</span>
+    <h1>Chưa thể xử lý yêu cầu này.</h1>
+    <p>Vui lòng thử lại sau. Nếu sự cố tiếp tục, hãy liên hệ quản trị viên và cung cấp mã yêu cầu.</p>
+    @if (Model.ShowRequestId)
+    {
+        <p><strong>Mã yêu cầu:</strong> <code>@Model.RequestId</code></p>
+    }
+    <a class="btn btn-secondary" href="~/"><icon name="arrow-left" />Về trang chủ</a>
+</section>

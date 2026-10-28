@@ -1,0 +1,327 @@
+@model CustomerSupportAI.ViewModels.DashboardViewModel
+@{
+    ViewData["Title"] = "Tổng quan";
+    var firstName = User.Identity?.Name?.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
+    var resolvedPercent = Model.Total == 0 ? 0 : (int)Math.Round(Model.Resolved * 100.0 / Model.Total);
+    var periodText = Model.Range == 90 ? "90 ngày" : $"{Model.Range} ngày";
+
+    // Change vs the previous period of equal length; only a percentage when the base is non-zero.
+    var diff = Model.NewInRange - Model.NewPrevious;
+    string deltaClass = diff > 0 ? "delta-up" : diff < 0 ? "delta-down" : "delta-flat";
+    string deltaIcon = diff > 0 ? "trending-up" : diff < 0 ? "trending-down" : "arrow-right";
+    string? deltaText = Model.NewPrevious > 0
+        ? $"{(diff >= 0 ? "+" : "")}{Math.Round(diff * 100.0 / Model.NewPrevious)}%"
+        : null;
+
+    // Clean y-axis: four steps of 1, 2 or 5 × 10^k.
+    var max = Model.Trend.Count == 0 ? 0 : Model.Trend.Max(p => p.Count);
+    var rawStep = Math.Max(1, (int)Math.Ceiling(max / 4.0));
+    var magnitude = (int)Math.Pow(10, Math.Floor(Math.Log10(rawStep)));
+    var step = new[] { 1, 2, 5, 10 }.Select(f => f * magnitude).First(s => s >= rawStep);
+    var axisMax = step * 4;
+    var labelEvery = Model.Trend.Count <= 7 ? 1 : Model.Trend.Count <= 13 ? 2 : 5;
+    string BucketLabel(TrendPoint p) => Model.BucketDays == 1
+        ? p.Start.ToString("dd/MM")
+        : $"{p.Start:dd/MM}–{p.Start.AddDays(6):dd/MM}";
+    var statusOrder = new[] { "Open", "In progress", "Resolved", "Closed" };
+}
+
+<section class="dashboard-hero">
+    <div>
+        <span class="eyebrow"><icon name="calendar" class="icon-sm" />@DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy")</span>
+        <h1>Xin chào, @firstName</h1>
+        <p>@(Model.IsStaff ? "Theo dõi hàng đợi, phản hồi khách hàng và nắm tình hình hỗ trợ trong một màn hình." : "Theo dõi yêu cầu của bạn, hỏi trợ lý hoặc tra cứu hướng dẫn bất cứ lúc nào.")</p>
+    </div>
+    <div class="dashboard-hero-actions">
+        <a class="btn btn-light" asp-controller="Assistant" asp-action="Index"><icon name="sparkles" />Hỏi trợ lý</a>
+        @if (Model.IsStaff)
+        {
+            <a class="btn btn-on-dark" asp-controller="Tickets" asp-action="Index" asp-route-status="Open"><icon name="inbox" />Mở hàng đợi</a>
+        }
+        else
+        {
+            <a class="btn btn-on-dark" asp-controller="Tickets" asp-action="Create"><icon name="plus" />Tạo yêu cầu</a>
+        }
+    </div>
+</section>
+
+<section class="kpi-grid stats-grid" aria-label="Chỉ số chính">
+    <article class="kpi">
+        <div class="kpi-top"><span class="kpi-label">Yêu cầu mới · @periodText</span><span class="kpi-icon"><icon name="ticket" /></span></div>
+        <div class="kpi-value">@Model.NewInRange<span class="kpi-unit">yêu cầu</span></div>
+        <div class="kpi-meta">
+            @if (deltaText is not null)
+            {
+                <span class="delta @deltaClass"><icon name="@deltaIcon" />@deltaText</span><span>so với @periodText trước (@Model.NewPrevious)</span>
+            }
+            else
+            {
+                <span>@(Model.NewInRange == 0 ? "Chưa có yêu cầu trong kỳ này" : "Kỳ trước chưa có yêu cầu để so sánh")</span>
+            }
+        </div>
+    </article>
+    <article class="kpi">
+        <div class="kpi-top"><span class="kpi-label">Cần xử lý</span><span class="kpi-icon tone-warning"><icon name="clock" /></span></div>
+        <div class="kpi-value">@Model.Open<span class="kpi-unit">yêu cầu</span></div>
+        <div class="kpi-meta">
+            @if (Model.IsStaff)
+            {
+                <a asp-controller="Tickets" asp-action="Index" asp-route-status="@CustomerSupportAI.Controllers.TicketsController.AwaitingFilter">@Model.AwaitingTeam chờ nhân viên phản hồi</a><span>· @Model.Unanswered chưa có phản hồi nào</span>
+            }
+            else
+            {
+                <span>Mới tiếp nhận và đang xử lý</span>
+            }
+        </div>
+    </article>
+    <article class="kpi">
+        <div class="kpi-top"><span class="kpi-label">Đã hoàn tất</span><span class="kpi-icon tone-success"><icon name="circle-check" /></span></div>
+        <div class="kpi-value">@Model.Resolved<span class="kpi-unit">/ @Model.Total</span></div>
+        <div class="kpi-meta">@resolvedPercent% tổng số yêu cầu đã giải quyết hoặc đóng</div>
+    </article>
+    @if (Model.IsStaff)
+    {
+        var fr = Model.AvgFirstResponse;
+        var (frValue, frUnit) = fr is null ? ("—", "")
+            : fr.Value.TotalMinutes < 60 ? (Math.Max(1, Math.Round(fr.Value.TotalMinutes)).ToString("0"), "phút")
+            : fr.Value.TotalHours < 48 ? (fr.Value.TotalHours.ToString("0.#"), "giờ")
+            : (fr.Value.TotalDays.ToString("0.#"), "ngày");
+        <article class="kpi">
+            <div class="kpi-top"><span class="kpi-label">Phản hồi đầu tiên TB · @periodText</span><span class="kpi-icon tone-sky"><icon name="clock" /></span></div>
+            <div class="kpi-value">@frValue<span class="kpi-unit">@frUnit</span></div>
+            <div class="kpi-meta">@(fr is null ? "Chưa có yêu cầu nào trong kỳ được phản hồi" : "Từ lúc tạo đến tin nhắn đầu tiên của nhân viên")</div>
+        </article>
+    }
+    else
+    {
+        <article class="kpi">
+            <div class="kpi-top"><span class="kpi-label">Lượt hỏi trợ lý</span><span class="kpi-icon tone-sky"><icon name="bot" /></span></div>
+            <div class="kpi-value">@Model.Conversations<span class="kpi-unit">lượt</span></div>
+            <div class="kpi-meta">Trong lịch sử trò chuyện của bạn</div>
+        </article>
+    }
+</section>
+
+<div class="grid-main-aside">
+    <section class="card chart-card" aria-labelledby="trend-title">
+        <div class="card-header">
+            <div>
+                <h2 id="trend-title">Yêu cầu mới theo @(Model.BucketDays == 1 ? "ngày" : "tuần")</h2>
+                <p class="card-subtitle">Số yêu cầu được tạo trong @periodText gần nhất</p>
+            </div>
+            <nav class="segmented" aria-label="Khoảng thời gian">
+                @foreach (var r in new[] { 7, 30, 90 })
+                {
+                    <a asp-action="Index" asp-route-range="@(r == 30 ? null : r)" aria-current="@(Model.Range == r ? "true" : null)">@r ngày</a>
+                }
+            </nav>
+        </div>
+        <div class="card-body">
+            @if (Model.Total == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon"><icon name="chart-column" /></span>
+                    <h3>Chưa có dữ liệu</h3>
+                    <p>Biểu đồ sẽ hiển thị khi có yêu cầu hỗ trợ đầu tiên.</p>
+                </div>
+            }
+            else
+            {
+                <div class="chart-summary"><strong>@Model.NewInRange</strong><span>yêu cầu mới · tổng cộng @Model.Total yêu cầu</span></div>
+                <div class="chart-wrap">
+                    <div class="col-chart">
+                        <div class="col-chart-y" aria-hidden="true">
+                            @for (var v = 0; v <= axisMax; v += step)
+                            {
+                                <span style="bottom:@DisplayText.CssPercent(v * 100.0 / axisMax)">@v</span>
+                            }
+                        </div>
+                        <div class="col-chart-plot">
+                            @for (var v = 0; v <= axisMax; v += step)
+                            {
+                                <span class="col-chart-gridline @(v == 0 ? "is-base" : "")" style="bottom:@DisplayText.CssPercent(v * 100.0 / axisMax)"></span>
+                            }
+                            <div class="col-chart-cols">
+                                @foreach (var p in Model.Trend)
+                                {
+                                    <button type="button" class="chart-col" data-label="@BucketLabel(p)" data-value="@p.Count yêu cầu" aria-label="@BucketLabel(p): @p.Count yêu cầu">
+                                        <span class="chart-bar" style="height:@DisplayText.CssPercent(p.Count * 100.0 / axisMax)"></span>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-chart-x" aria-hidden="true">
+                            @for (var i = 0; i < Model.Trend.Count; i++)
+                            {
+                                <span>@(i % labelEvery == 0 ? Model.Trend[i].Start.ToString("dd/MM") : "")</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <details class="chart-table">
+                    <summary>Xem dạng bảng</summary>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead><tr><th scope="col">@(Model.BucketDays == 1 ? "Ngày" : "Tuần")</th><th scope="col" class="num">Yêu cầu mới</th></tr></thead>
+                            <tbody>
+                                @foreach (var p in Model.Trend)
+                                {
+                                    <tr><td>@BucketLabel(p)</td><td class="num">@p.Count</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            }
+        </div>
+    </section>
+
+    <div class="stack">
+        <section class="card" aria-labelledby="status-title">
+            <div class="card-header"><div><h2 id="status-title">Phân bố trạng thái</h2><p class="card-subtitle">Toàn bộ @Model.Total yêu cầu</p></div></div>
+            <div class="card-body">
+                @if (Model.Total == 0)
+                {
+                    <p class="muted">Chưa có yêu cầu nào.</p>
+                }
+                else
+                {
+                    <ul class="bar-list">
+                        @foreach (var s in statusOrder)
+                        {
+                            var count = Model.StatusCounts.GetValueOrDefault(s);
+                            <li class="bar-row">
+                                <div class="bar-row-head"><span class="@DisplayText.TicketStatusBadge(s)">@DisplayText.TicketStatus(s)</span><strong>@count</strong></div>
+                                <div class="bar-track"><span class="bar-fill @(count == 0 ? "is-zero" : "")" style="width:@DisplayText.CssPercent(count * 100.0 / Model.Total)"></span></div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </section>
+        <section class="card" aria-labelledby="category-title">
+            <div class="card-header"><div><h2 id="category-title">Theo danh mục</h2><p class="card-subtitle">Nhóm vấn đề thường gặp</p></div></div>
+            <div class="card-body">
+                @if (Model.Categories.Count == 0)
+                {
+                    <p class="muted">Chưa có dữ liệu danh mục.</p>
+                }
+                else
+                {
+                    var catMax = Model.Categories.Values.Max();
+                    <ul class="bar-list">
+                        @foreach (var c in Model.Categories.OrderByDescending(c => c.Value))
+                        {
+                            <li class="bar-row">
+                                <div class="bar-row-head"><span>@DisplayText.TicketCategory(c.Key)</span><strong>@c.Value</strong></div>
+                                <div class="bar-track"><span class="bar-fill" style="width:@DisplayText.CssPercent(c.Value * 100.0 / catMax)"></span></div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="grid-2 section-gap">
+    <section class="card" aria-labelledby="queue-title">
+        <div class="card-header">
+            <div>
+                <h2 id="queue-title">@(Model.IsStaff ? "Cần xử lý" : "Yêu cầu gần đây")</h2>
+                <p class="card-subtitle">@(Model.IsStaff ? "Yêu cầu đang mở, chờ lâu nhất xếp trước" : "5 yêu cầu mới nhất của bạn")</p>
+            </div>
+            <a class="card-link" asp-controller="Tickets" asp-action="Index">Xem tất cả <icon name="arrow-right" class="icon-sm" /></a>
+        </div>
+        @{ var list = Model.IsStaff ? Model.Queue : Model.Recent; }
+        @if (list.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon"><icon name="@(Model.IsStaff ? "circle-check" : "inbox")" /></span>
+                <h3>@(Model.IsStaff ? "Không còn yêu cầu tồn đọng" : "Bạn chưa có yêu cầu nào")</h3>
+                <p>@(Model.IsStaff ? "Mọi yêu cầu đều đã được giải quyết hoặc đóng." : "Khi cần hỗ trợ, hãy gửi yêu cầu để đội ngũ phản hồi.")</p>
+                @if (!Model.IsStaff)
+                {
+                    <a class="btn btn-primary" asp-controller="Tickets" asp-action="Create"><icon name="plus" />Tạo yêu cầu</a>
+                }
+            </div>
+        }
+        else
+        {
+            <ul class="queue-list">
+                @foreach (var t in list)
+                {
+                    <li>
+                        <a class="queue-item" asp-controller="Tickets" asp-action="Details" asp-route-id="@t.Id">
+                            <span>
+                                <strong>@t.Subject</strong>
+                                <small><span class="ticket-code">@t.TicketNumber</span> · @(Model.IsStaff ? t.Customer.DisplayName : DisplayText.TicketCategory(t.Category))</small>
+                            </span>
+                            <span class="@DisplayText.TicketStatusBadge(t.Status)">@DisplayText.TicketStatus(t.Status)</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+    <section class="card" aria-labelledby="activity-title">
+        <div class="card-header">
+            <div><h2 id="activity-title">Hoạt động gần đây</h2><p class="card-subtitle">Tin nhắn mới nhất trong các yêu cầu</p></div>
+            <a class="card-link" asp-action="Activity">Xem tất cả <icon name="arrow-right" class="icon-sm" /></a>
+        </div>
+        @if (Model.Activity.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon"><icon name="message-square" /></span>
+                <h3>Chưa có hoạt động</h3>
+                <p>Tin nhắn và phản hồi sẽ xuất hiện tại đây.</p>
+            </div>
+        }
+        else
+        {
+            <ul class="activity-list">
+                @foreach (var m in Model.Activity)
+                {
+                    var team = m.Author.Role != UserRoles.Customer;
+                    <li class="activity-item">
+                        <span class="avatar avatar-sm @(team ? "avatar-team" : "")">@m.Author.DisplayName[..1]</span>
+                        <div>
+                            <div class="activity-head"><strong>@m.Author.DisplayName</strong> trong <a asp-controller="Tickets" asp-action="Details" asp-route-id="@m.TicketId">@m.Ticket.TicketNumber</a></div>
+                            <p>@(m.Body.Length > 120 ? m.Body[..120] + "…" : m.Body)</p>
+                            <small>@m.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy HH:mm")</small>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+<section class="shortcut-grid" aria-label="Lối tắt">
+    <a class="card card-interactive shortcut" asp-controller="Knowledge" asp-action="Index">
+        <span class="kpi-icon"><icon name="book-open" /></span>
+        <div><h3>Kho hướng dẫn</h3><p>Tài khoản, thanh toán, sản phẩm</p></div>
+        <icon name="chevron-right" />
+    </a>
+    <a class="card card-interactive shortcut" asp-controller="Assistant" asp-action="Index">
+        <span class="kpi-icon tone-sky"><icon name="sparkles" /></span>
+        <div><h3>Trợ lý thông minh</h3><p>Giải đáp theo ngữ cảnh của bạn</p></div>
+        <icon name="chevron-right" />
+    </a>
+    @if (Model.IsStaff)
+    {
+        <a class="card card-interactive shortcut" asp-controller="Customers" asp-action="Index">
+            <span class="kpi-icon tone-success"><icon name="users" /></span>
+            <div><h3>Khách hàng</h3><p>Hồ sơ và trạng thái tài khoản</p></div>
+            <icon name="chevron-right" />
+        </a>
+    }
+    else
+    {
+        <a class="card card-interactive shortcut" asp-controller="Tickets" asp-action="Create">
+            <span class="kpi-icon tone-success"><icon name="plus" /></span>
+            <div><h3>Gửi yêu cầu mới</h3><p>Đội ngũ hỗ trợ sẽ phản hồi bạn</p></div>
+            <icon name="chevron-right" />
+        </a>
+    }
+</section>

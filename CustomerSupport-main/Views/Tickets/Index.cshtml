@@ -1,0 +1,176 @@
+@model CustomerSupportAI.ViewModels.TicketIndexViewModel
+@using CustomerSupportAI.Controllers
+@{
+    ViewData["Title"] = Model.IsStaff ? "Hộp thư hỗ trợ" : "Yêu cầu của tôi";
+    var filtered = Model.IsFiltered;
+    var local = TimeSpan.FromHours(7);
+    var hasDates = Model.From is not null || Model.To is not null;
+}
+
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Hỗ trợ khách hàng</span>
+        <h1>@(Model.IsStaff ? "Hộp thư hỗ trợ" : "Yêu cầu của tôi")</h1>
+        <p class="page-subtitle">@(Model.IsStaff ? "Tiếp nhận, phản hồi và xử lý yêu cầu của khách hàng." : "Theo dõi toàn bộ trao đổi hỗ trợ của bạn tại đây.")</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-secondary" href="@Context.Request.Path@Context.Request.QueryString" aria-label="Làm mới danh sách"><icon name="refresh-cw" />Làm mới</a>
+        @if (!Model.IsStaff)
+        {
+            <a class="btn btn-primary" asp-action="Create"><icon name="plus" />Tạo yêu cầu</a>
+        }
+    </div>
+</header>
+
+<section class="kpi-grid @(Model.IsStaff ? "" : "kpi-3")" aria-label="Tổng quan yêu cầu">
+    <article class="kpi">
+        <div class="kpi-top"><span class="kpi-label">Tổng yêu cầu</span><span class="kpi-icon"><icon name="ticket" /></span></div>
+        <div class="kpi-value">@Model.TotalCount</div>
+        <div class="kpi-meta">Trong không gian của bạn</div>
+    </article>
+    <article class="kpi">
+        <div class="kpi-top"><span class="kpi-label">Đang mở</span><span class="kpi-icon tone-warning"><icon name="clock" /></span></div>
+        <div class="kpi-value">@Model.OpenCount</div>
+        <div class="kpi-meta">Mới tiếp nhận hoặc đang xử lý</div>
+    </article>
+    @if (Model.IsStaff)
+    {
+        <a class="kpi card-interactive kpi-link" asp-action="Index" asp-route-status="@TicketsController.AwaitingFilter">
+            <div class="kpi-top"><span class="kpi-label">Chờ nhân viên phản hồi</span><span class="kpi-icon tone-danger"><icon name="message-circle-question" /></span></div>
+            <div class="kpi-value">@Model.AwaitingCount</div>
+            <div class="kpi-meta">Tin nhắn mới nhất là của khách hàng</div>
+        </a>
+    }
+    <article class="kpi">
+        <div class="kpi-top"><span class="kpi-label">Đã giải quyết</span><span class="kpi-icon tone-success"><icon name="circle-check" /></span></div>
+        <div class="kpi-value">@Model.ResolvedCount</div>
+        <div class="kpi-meta">Đã hoàn tất hỗ trợ</div>
+    </article>
+</section>
+
+<section class="card" aria-labelledby="ticket-list-title">
+    <div class="card-header">
+        <div>
+            <h2 id="ticket-list-title">@(Model.IsStaff ? "Hàng đợi hỗ trợ" : "Trao đổi của bạn")</h2>
+            <p class="card-subtitle">Tìm theo tiêu đề hoặc mã yêu cầu; lọc theo trạng thái, danh mục và ngày tạo.</p>
+        </div>
+        <span class="cell-sub">@Model.Paging.TotalItems kết quả</span>
+    </div>
+    <form class="table-toolbar" method="get" asp-action="Index" role="search">
+        <input type="hidden" name="sort" value="@(Model.Sort == "id_desc" ? null : Model.Sort)" />
+        @if (Model.Customer is not null)
+        {
+            <input type="hidden" name="customerId" value="@Model.Customer.Id" />
+        }
+        <label class="input-group">
+            <icon name="search" />
+            <span class="visually-hidden">Tìm yêu cầu hỗ trợ</span>
+            <input name="search" type="search" value="@Model.Search" placeholder="Tìm theo tiêu đề hoặc mã CS…" />
+        </label>
+        <select name="status" aria-label="Lọc theo trạng thái">
+            <option value="">Tất cả trạng thái</option>
+            @if (Model.IsStaff)
+            {
+                <option value="@TicketsController.AwaitingFilter" selected="@(Model.Status == TicketsController.AwaitingFilter ? "selected" : null)">Chờ nhân viên phản hồi</option>
+            }
+            @foreach (var status in new[] { "Open", "In progress", "Resolved", "Closed" })
+            {
+                <option value="@status" selected="@(Model.Status == status ? "selected" : null)">@DisplayText.TicketStatus(status)</option>
+            }
+        </select>
+        <select name="category" aria-label="Lọc theo danh mục">
+            <option value="">Tất cả danh mục</option>
+            @foreach (var category in Model.Categories)
+            {
+                <option value="@category" selected="@(Model.Category == category ? "selected" : null)">@DisplayText.TicketCategory(category)</option>
+            }
+        </select>
+        <details class="date-filter" data-dropdown>
+            <summary class="btn @(hasDates ? "btn-outline" : "btn-ghost")"><icon name="calendar" />@(hasDates ? $"{Model.From?.ToString("dd/MM/yyyy") ?? "…"} – {Model.To?.ToString("dd/MM/yyyy") ?? "…"}" : "Ngày tạo")</summary>
+            <div class="date-filter-fields">
+                <label><span>Từ ngày</span><input type="date" name="from" value="@Model.From?.ToString("yyyy-MM-dd")" /></label>
+                <label><span>Đến ngày</span><input type="date" name="to" value="@Model.To?.ToString("yyyy-MM-dd")" /></label>
+            </div>
+        </details>
+        <button class="btn btn-secondary" type="submit"><icon name="filter" />Lọc</button>
+        @if (filtered)
+        {
+            <a class="btn btn-ghost" asp-action="Index"><icon name="x" />Xóa bộ lọc</a>
+        }
+    </form>
+    @if (Model.Customer is not null)
+    {
+        <div class="filter-bar">
+            <span class="chip is-active"><icon name="user" />Khách hàng: @Model.Customer.DisplayName</span>
+            <a class="card-link" asp-controller="Customers" asp-action="Details" asp-route-id="@Model.Customer.Id">Xem hồ sơ<icon name="chevron-right" class="icon-sm" /></a>
+        </div>
+    }
+    @if (Model.Tickets.Count == 0)
+    {
+        <div class="empty-state">
+            <span class="empty-icon"><icon name="@(filtered ? "search" : "inbox")" /></span>
+            <h3>@(filtered ? "Không tìm thấy yêu cầu phù hợp" : "Chưa có yêu cầu nào")</h3>
+            <p>@(filtered ? "Hãy thử thay đổi từ khóa tìm kiếm hoặc bộ lọc." : Model.IsStaff ? "Yêu cầu mới của khách hàng sẽ xuất hiện tại đây." : "Khi cần hỗ trợ, hãy gửi yêu cầu để đội ngũ chăm sóc khách hàng phản hồi.")</p>
+            @if (!Model.IsStaff && Model.TotalCount == 0)
+            {
+                <a class="btn btn-primary" asp-action="Create"><icon name="plus" />Gửi yêu cầu đầu tiên</a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <partial name="_SortHeader" model='new SortHeader("Yêu cầu", "subject", Model.Sort)' />
+                        @if (Model.IsStaff)
+                        {
+                            <partial name="_SortHeader" model='new SortHeader("Khách hàng", "customer", Model.Sort)' />
+                        }
+                        <th scope="col">Danh mục</th>
+                        <partial name="_SortHeader" model='new SortHeader("Trạng thái", "status", Model.Sort)' />
+                        <th scope="col" class="num">Tin nhắn</th>
+                        <partial name="_SortHeader" model='new SortHeader("Ngày tạo", "id", Model.Sort)' />
+                        <th scope="col"><span class="visually-hidden">Thao tác</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ticket in Model.Tickets)
+                    {
+                        var awaiting = Model.IsStaff && ticket.Status is "Open" or "In progress" && Model.AwaitingTeam.Contains(ticket.Id);
+                        <tr>
+                            <td>
+                                <div class="cell-main">
+                                    <a asp-action="Details" asp-route-id="@ticket.Id">@ticket.Subject</a>
+                                    <span class="ticket-code">@ticket.TicketNumber</span>
+                                </div>
+                            </td>
+                            @if (Model.IsStaff)
+                            {
+                                <td><a class="link-quiet" asp-action="Index" asp-route-customerId="@ticket.CustomerId" title="Lọc yêu cầu của khách hàng này">@ticket.Customer.DisplayName</a></td>
+                            }
+                            <td>@DisplayText.TicketCategory(ticket.Category)</td>
+                            <td>
+                                <span class="@DisplayText.TicketStatusBadge(ticket.Status)">@DisplayText.TicketStatus(ticket.Status)</span>
+                                @if (awaiting)
+                                {
+                                    <div class="cell-sub text-danger">Chờ phản hồi</div>
+                                }
+                            </td>
+                            <td class="num">@Model.MessageCounts.GetValueOrDefault(ticket.Id)</td>
+                            <td>
+                                @ticket.CreatedAt.ToOffset(local).ToString("dd/MM/yyyy")
+                                <div class="cell-sub">Cập nhật @ticket.UpdatedAt.ToOffset(local).ToString("dd/MM HH:mm")</div>
+                            </td>
+                            <td class="actions">
+                                <a class="btn btn-ghost btn-sm" asp-action="Details" asp-route-id="@ticket.Id" aria-label="Mở yêu cầu @ticket.TicketNumber">Mở<icon name="chevron-right" class="icon-sm" /></a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <partial name="_Pagination" model="Model.Paging" />
+    }
+</section>

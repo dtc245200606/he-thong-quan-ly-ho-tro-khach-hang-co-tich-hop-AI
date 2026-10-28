@@ -1,0 +1,217 @@
+@using System.Security.Claims
+@{
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    var action = ViewContext.RouteData.Values["action"]?.ToString();
+    var title = ViewData["Title"]?.ToString() ?? "";
+    var isAdmin = User.IsInRole(UserRoles.Admin);
+    var isStaff = User.IsInRole(UserRoles.Staff);
+    var displayName = User.Identity?.Name ?? "";
+    var initial = displayName.Length > 0 ? displayName[..1].ToUpperInvariant() : "?";
+    var roleText = DisplayText.Role(User.FindFirst(ClaimTypes.Role)?.Value);
+
+    // Breadcrumb section for the current controller: (label, controller, action).
+    (string Label, string Controller, string Action)? section = controller switch
+    {
+        "Dashboard" when action == "Activity" => ("Tổng quan", "Dashboard", "Index"),
+        "Tickets" => (isAdmin || isStaff ? "Hộp thư hỗ trợ" : "Yêu cầu của tôi", "Tickets", "Index"),
+        "Assistant" => ("Trợ lý", "Assistant", "Index"),
+        "Knowledge" => ("Kho hướng dẫn", "Knowledge", "Index"),
+        "Account" => ("Tài khoản", "Account", "Profile"),
+        "Customers" => ("Khách hàng", "Customers", "Index"),
+        "Admin" or "Settings" => ("Quản trị", "Admin", "Users"),
+        _ => null
+    };
+    bool Active(string c, string? a = null) => controller == c && (a is null || action == a);
+    var staffDirectory = Active("Admin", "Users") && Context.Request.Query["role"] == UserRoles.Staff;
+
+    // Navigation groups: (group label, items). Only pages that exist and that the role may open.
+    var nav = new List<(string Group, (string Controller, string Action, string Icon, string Label, bool Active, object? Route)[] Items)>
+    {
+        ("Tổng quan", [("Dashboard", "Index", "layout-dashboard", "Dashboard", Active("Dashboard", "Index"), null)]),
+        ("Hỗ trợ khách hàng", [
+            ("Tickets", "Index", "inbox", isAdmin || isStaff ? "Hộp thư hỗ trợ" : "Yêu cầu của tôi", Active("Tickets"), null),
+            .. (isAdmin || isStaff ? new[] { ("Customers", "Index", "users", "Khách hàng", Active("Customers"), (object?)null) } : []),
+            ("Dashboard", "Activity", "activity", "Lịch sử trao đổi", Active("Dashboard", "Activity"), null)]),
+        ("Trí tuệ nhân tạo", [
+            ("Assistant", "Index", "sparkles", "Trợ lý AI", Active("Assistant"), null),
+            ("Knowledge", "Index", "book-open", "Kho hướng dẫn", Active("Knowledge"), null)]),
+    };
+    if (isAdmin)
+    {
+        nav.Add(("Quản lý vận hành", [("Admin", "Users", "user-cog", "Nhân viên hỗ trợ", staffDirectory, new { role = UserRoles.Staff })]));
+        nav.Add(("Hệ thống", [
+            ("Admin", "Users", "shield-check", "Tài khoản & phân quyền", controller == "Admin" && action != "AuditLog" && !staffDirectory, null),
+            ("Admin", "AuditLog", "history", "Nhật ký hoạt động", Active("Admin", "AuditLog"), null),
+            ("Settings", "Index", "settings", "Cấu hình AI", Active("Settings"), null)]));
+    }
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#0f1f3d"/>
+<meta name="description" content="CustomerSupport: tra cứu hướng dẫn, hỏi trợ lý và theo dõi yêu cầu hỗ trợ khách hàng."/>
+<title>@title · CustomerSupport</title>
+<script>try{if(localStorage.getItem('cs-sidebar')==='collapsed')document.documentElement.dataset.sidebar='collapsed'}catch(e){}</script>
+<link rel="preload" href="~/fonts/be-vietnam-pro-vietnamese-400.woff2" as="font" type="font/woff2" crossorigin/>
+<link rel="preload" href="~/fonts/be-vietnam-pro-latin-400.woff2" as="font" type="font/woff2" crossorigin/>
+<link rel="stylesheet" href="~/css/fonts.css" asp-append-version="true"/>
+<link rel="stylesheet" href="~/css/tokens.css" asp-append-version="true"/>
+<link rel="stylesheet" href="~/css/site.css" asp-append-version="true"/>
+<script src="~/js/site.js" asp-append-version="true" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Đi đến nội dung</a>
+@if (signedIn)
+{
+<div class="app-shell">
+    <aside class="sidebar" id="app-sidebar" aria-label="Thanh điều hướng">
+        <div class="sidebar-head">
+            <a class="brand" asp-controller="Dashboard" asp-action="Index" aria-label="CustomerSupport, về trang tổng quan">
+                <span class="brand-mark"><icon name="headset" /></span>
+                <span class="brand-text"><strong>CustomerSupport</strong><small>Kết nối &amp; giải đáp</small></span>
+            </a>
+            <button class="sidebar-toggle sidebar-collapse" type="button" data-sidebar-collapse aria-label="Thu gọn thanh điều hướng" aria-controls="app-sidebar" aria-expanded="true">
+                <icon name="panel-left-close" />
+            </button>
+            <button class="sidebar-toggle topbar-menu-close" type="button" data-nav-close aria-label="Đóng menu">
+                <icon name="x" />
+            </button>
+        </div>
+        <nav class="sidebar-nav" aria-label="Điều hướng chính">
+            @foreach (var group in nav)
+            {
+                <div class="nav-group">
+                    <p class="nav-group-label">@group.Group</p>
+                    @foreach (var item in group.Items)
+                    {
+                        <a class="nav-link @(item.Active ? "is-active" : "")" aria-current="@(item.Active ? "page" : null)" data-tooltip="@item.Label" href="@Url.Action(item.Action, item.Controller, item.Route)"><icon name="@item.Icon" /><span class="nav-label">@item.Label</span></a>
+                    }
+                </div>
+            }
+            <div class="sidebar-help">
+                <icon name="life-buoy" />
+                <strong>Cần trợ giúp?</strong>
+                <p>Tra cứu hướng dẫn hoặc hỏi trợ lý để được giải đáp nhanh.</p>
+                <a asp-controller="Knowledge" asp-action="Index">Mở kho hướng dẫn <icon name="arrow-right" class="icon-sm" /></a>
+            </div>
+        </nav>
+        <div class="sidebar-foot">
+            <form asp-controller="Account" asp-action="Logout" method="post">
+                <button class="nav-link" type="submit" data-tooltip="Đăng xuất"><icon name="log-out" /><span class="nav-label">Đăng xuất</span></button>
+            </form>
+        </div>
+    </aside>
+    <div class="sidebar-backdrop" data-nav-close></div>
+    <div class="workspace">
+        <header class="topbar">
+            <button class="btn btn-ghost btn-icon topbar-menu" type="button" data-nav-open aria-label="Mở menu" aria-controls="app-sidebar" aria-expanded="false"><icon name="menu" /></button>
+            <ol class="breadcrumb" aria-label="Vị trí trang">
+                <li><a asp-controller="Dashboard" asp-action="Index" aria-label="Tổng quan"><icon name="layout-dashboard" /></a></li>
+                @if (section is { } s && s.Label != title)
+                {
+                    <li><icon name="chevron-right" /><a asp-controller="@s.Controller" asp-action="@s.Action">@s.Label</a></li>
+                }
+                <li aria-current="page"><icon name="chevron-right" />@title</li>
+            </ol>
+            <form class="topbar-search" role="search" method="get" asp-controller="Tickets" asp-action="Index">
+                <icon name="search" />
+                <label class="visually-hidden" for="global-search">Tìm yêu cầu hỗ trợ</label>
+                <input id="global-search" name="search" type="search" placeholder="Tìm yêu cầu theo tiêu đề hoặc mã…" autocomplete="off" />
+            </form>
+            <div class="topbar-actions">
+                <details class="dropdown" data-dropdown>
+                    <summary class="icon-trigger" aria-label="Thông báo"><icon name="bell" /></summary>
+                    <div class="dropdown-panel wide">
+                        @await Component.InvokeAsync("Notifications")
+                    </div>
+                </details>
+                <details class="dropdown" data-dropdown>
+                    <summary class="user-trigger" aria-label="Menu tài khoản">
+                        <span class="avatar avatar-sm">@initial</span>
+                        <span class="user-trigger-text"><strong>@displayName</strong><small>@roleText</small></span>
+                        <icon name="chevron-down" class="icon-sm" />
+                    </summary>
+                    <div class="dropdown-panel" role="menu">
+                        <div class="dropdown-header">
+                            <div><strong>@displayName</strong><div class="cell-sub">@User.FindFirst(ClaimTypes.Email)?.Value</div></div>
+                            <span class="badge badge-plain badge-neutral">@roleText</span>
+                        </div>
+                        <a class="dropdown-item" role="menuitem" asp-controller="Account" asp-action="Profile"><icon name="user" />Hồ sơ cá nhân</a>
+                        <a class="dropdown-item" role="menuitem" asp-controller="Account" asp-action="ChangePassword"><icon name="key-round" />Đổi mật khẩu</a>
+                        @if (isAdmin)
+                        {
+                            <a class="dropdown-item" role="menuitem" asp-controller="Settings" asp-action="Index"><icon name="settings" />Cấu hình hệ thống</a>
+                        }
+                        <div class="dropdown-divider"></div>
+                        <form asp-controller="Account" asp-action="Logout" method="post">
+                            <button class="dropdown-item is-danger" role="menuitem" type="submit"><icon name="log-out" />Đăng xuất</button>
+                        </form>
+                    </div>
+                </details>
+            </div>
+        </header>
+        <main class="main" id="main-content" tabindex="-1">
+            @RenderBody()
+            <footer class="app-footer">
+                <span>© @DateTime.Now.Year CustomerSupport · Kết nối để giải quyết</span>
+                <a asp-controller="Knowledge" asp-action="Index">Hướng dẫn sử dụng</a>
+            </footer>
+        </main>
+    </div>
+</div>
+}
+else
+{
+<div class="public-shell">
+    <header class="public-header">
+        <a class="brand" asp-controller="Home" asp-action="Index" aria-label="CustomerSupport, trang chủ">
+            <span class="brand-mark"><icon name="headset" /></span>
+            <span class="brand-text"><strong>CustomerSupport</strong><small>Kết nối &amp; giải đáp</small></span>
+        </a>
+        <nav class="public-nav" aria-label="Điều hướng">
+            <a class="btn btn-ghost hide-sm" asp-controller="Knowledge" asp-action="Index">Kho hướng dẫn</a>
+            <a class="btn btn-ghost" asp-controller="Account" asp-action="Login">Đăng nhập</a>
+            <a class="btn btn-primary" asp-controller="Account" asp-action="Register">Bắt đầu miễn phí</a>
+        </nav>
+    </header>
+    <main class="public-main" id="main-content" tabindex="-1">@RenderBody()</main>
+    <footer class="public-footer"><span>© @DateTime.Now.Year CustomerSupport</span><span>Rõ ràng trong trao đổi. Chủ động trong hỗ trợ.</span></footer>
+</div>
+}
+<div class="toast-region" aria-live="polite">
+    @if (TempData["Success"] is string success)
+    {
+        <div class="toast toast-success notice notice-success" role="status" data-autodismiss>
+            <icon name="circle-check" /><p>@success</p>
+            <button class="toast-close" type="button" data-toast-close aria-label="Đóng thông báo"><icon name="x" class="icon-sm" /></button>
+        </div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="toast toast-error notice notice-error" role="alert">
+            <icon name="circle-alert" /><p>@error</p>
+            <button class="toast-close" type="button" data-toast-close aria-label="Đóng thông báo"><icon name="x" class="icon-sm" /></button>
+        </div>
+    }
+</div>
+<dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <form method="dialog">
+        <div class="modal-body">
+            <span class="modal-icon" data-confirm-icon><icon name="triangle-alert" /></span>
+            <div>
+                <h2 id="confirm-title">Xác nhận thao tác</h2>
+                <p id="confirm-message"></p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" value="cancel" type="submit" autofocus>Hủy</button>
+            <button class="btn btn-danger" value="confirm" type="submit" id="confirm-accept">Xác nhận</button>
+        </div>
+    </form>
+</dialog>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

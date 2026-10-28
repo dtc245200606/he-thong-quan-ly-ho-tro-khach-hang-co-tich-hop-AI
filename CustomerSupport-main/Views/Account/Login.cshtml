@@ -1,0 +1,54 @@
+@model CustomerSupportAI.ViewModels.LoginViewModel
+@{
+    ViewData["Title"] = "Đăng nhập";
+}
+
+<section class="auth-shell">
+    <div class="auth-aside">
+        <span class="eyebrow">Một cửa đăng nhập</span>
+        <h1>Chào mừng bạn trở lại.</h1>
+        <p>Khách hàng và nhân viên dùng chung màn hình này. Hệ thống kiểm tra tài khoản và tự đưa bạn đến đúng khu vực làm việc.</p>
+        <div class="auth-roles">
+            <div class="auth-role">
+                <icon name="user" />
+                <div><strong>Khách hàng</strong><span>Xem thông tin cá nhân, tạo yêu cầu hỗ trợ, theo dõi ticket của mình.</span></div>
+            </div>
+            <div class="auth-role">
+                <icon name="headset" />
+                <div><strong>Nhân viên / Quản trị</strong><span>Xử lý ticket, phản hồi khách hàng, cập nhật trạng thái.</span></div>
+            </div>
+        </div>
+        <p class="auth-note"><icon name="shield-check" class="icon-sm" />Vai trò được xác định từ tài khoản, không cần chọn cổng.</p>
+    </div>
+    <div class="auth-panel">
+        <span class="eyebrow">Đăng nhập</span>
+        <h2>Đăng nhập tài khoản</h2>
+        <p>Nhập email hoặc số điện thoại cùng mật khẩu.</p>
+        <form asp-action="Login" method="post" class="form-stack">
+            <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+            <input asp-for="ReturnUrl" type="hidden" />
+            <div class="field">
+                <label class="field-label" asp-for="Email">Email / Số điện thoại</label>
+                <span class="input-group">
+                    <icon name="mail" />
+                    <input asp-for="Email" autocomplete="username" placeholder="ban@congty.vn hoặc 0912345678" />
+                </span>
+                <span asp-validation-for="Email" class="field-error"></span>
+            </div>
+            <div class="field">
+                <label class="field-label" asp-for="Password">Mật khẩu</label>
+                <span class="input-group">
+                    <icon name="lock" />
+                    <input asp-for="Password" autocomplete="current-password" placeholder="Nhập mật khẩu" />
+                </span>
+                <span asp-validation-for="Password" class="field-error"></span>
+            </div>
+            <div class="auth-row">
+                <label class="check"><input asp-for="RememberMe" /> <span>Duy trì đăng nhập</span></label>
+                <a asp-action="ForgotPassword">Quên mật khẩu?</a>
+            </div>
+            <button class="btn btn-primary btn-lg btn-block" type="submit"><icon name="log-in" />Đăng nhập</button>
+        </form>
+        <p class="auth-switch">Chưa có tài khoản? <a asp-action="Register">Đăng ký tài khoản khách hàng</a></p>
+    </div>
+</section>

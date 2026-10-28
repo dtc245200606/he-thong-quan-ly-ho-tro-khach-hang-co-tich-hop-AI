@@ -1,0 +1,48 @@
+@model CustomerSupportAI.ViewModels.TicketCreateViewModel
+@{
+    ViewData["Title"] = "Tạo yêu cầu hỗ trợ";
+}
+
+<a class="back-link" asp-action="Index"><icon name="arrow-left" class="icon-sm" />Tất cả yêu cầu</a>
+<div class="form-page">
+    <header class="page-header">
+        <div>
+            <span class="eyebrow">Chăm sóc khách hàng</span>
+            <h1>Chúng tôi có thể giúp gì cho bạn?</h1>
+            <p class="page-subtitle">Mô tả vấn đề càng cụ thể, đội ngũ hỗ trợ càng phản hồi nhanh và chính xác.</p>
+        </div>
+    </header>
+    <form asp-action="Create" method="post" class="card card-body form-stack">
+        <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+        <div class="field">
+            <label class="field-label is-required" asp-for="Subject">Tiêu đề yêu cầu</label>
+            <input asp-for="Subject" maxlength="120" placeholder="Ví dụ: Không đăng nhập được sau khi đổi mật khẩu" />
+            <span asp-validation-for="Subject" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label class="field-label is-required" asp-for="Category">Danh mục</label>
+            <select asp-for="Category">
+                <option value="">Chọn danh mục phù hợp</option>
+                <option value="Product support">Hỗ trợ sản phẩm</option>
+                <option value="Billing">Hóa đơn và thanh toán</option>
+                <option value="Warranty &amp; repair">Bảo hành và sửa chữa</option>
+                <option value="Account access">Truy cập tài khoản</option>
+                <option value="Other">Khác</option>
+            </select>
+            <span asp-validation-for="Category" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label class="field-label is-required" asp-for="FirstMessage">Nội dung yêu cầu</label>
+            <textarea asp-for="FirstMessage" rows="7" maxlength="4000" placeholder="Bạn đã làm gì, gặp lỗi gì, đã thử những cách nào? Ghi mã đơn hàng nếu có."></textarea>
+            <span class="field-hint">Từ 10 đến 4.000 ký tự. Không gửi mật khẩu, mã OTP hoặc số thẻ.</span>
+            <span asp-validation-for="FirstMessage" class="field-error"></span>
+        </div>
+        <div class="form-actions">
+            <span>Chỉ bạn và đội ngũ hỗ trợ mới xem được yêu cầu này.</span>
+            <div>
+                <a class="btn btn-secondary" asp-action="Index">Hủy</a>
+                <button class="btn btn-primary" type="submit"><icon name="send" />Gửi yêu cầu</button>
+            </div>
+        </div>
+    </form>
+</div>

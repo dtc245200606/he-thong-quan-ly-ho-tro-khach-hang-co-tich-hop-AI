@@ -1,0 +1,60 @@
+@model CustomerSupportAI.ViewModels.KnowledgeViewModel
+@{
+    ViewData["Title"] = "Kho hướng dẫn";
+    var filtered = Model.Search.Length > 0 || Model.Category.Length > 0;
+}
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Câu trả lời trong tầm tay</span>
+        <h1>Kho hướng dẫn</h1>
+        <p class="page-subtitle">Tìm hiểu cách sử dụng hệ thống và chuẩn bị thông tin cần hỗ trợ.</p>
+    </div>
+    @if (User.IsInRole(UserRoles.Admin))
+    {
+        <div class="page-actions"><a class="btn btn-primary" asp-action="Edit"><icon name="plus" />Viết hướng dẫn</a></div>
+    }
+</header>
+<section class="search-hero" aria-labelledby="kb-search-title">
+    <h2 id="kb-search-title">Bạn đang tìm điều gì?</h2>
+    <form class="search-row" method="get" role="search">
+        <label class="input-group">
+            <icon name="search" />
+            <span class="visually-hidden">Tìm hướng dẫn</span>
+            <input name="search" type="search" value="@Model.Search" placeholder="Ví dụ: tài khoản, thanh toán, bảo hành…" />
+        </label>
+        <button class="btn btn-primary btn-lg" type="submit">Tìm hướng dẫn</button>
+        @if (filtered)
+        {
+            <a class="btn btn-secondary btn-lg" asp-action="Index"><icon name="x" />Xóa bộ lọc</a>
+        }
+    </form>
+    <div class="chips" aria-label="Chủ đề">
+        @foreach (var topic in new[] { "Tài khoản", "Yêu cầu hỗ trợ", "Thanh toán", "Sản phẩm", "Trợ lý" })
+        {
+            <a class="chip @(Model.Category == topic ? "is-active" : "")" aria-current="@(Model.Category == topic ? "true" : null)" asp-action="Index" asp-route-category="@topic">@topic</a>
+        }
+    </div>
+</section>
+@if (Model.Articles.Count == 0)
+{
+    <section class="card empty-state">
+        <span class="empty-icon"><icon name="search" /></span>
+        <h3>Chưa có hướng dẫn phù hợp</h3>
+        <p>Thử từ khóa khác hoặc hỏi trợ lý để được gợi ý.</p>
+        <a class="btn btn-primary" asp-controller="Assistant" asp-action="Index"><icon name="sparkles" />Hỏi trợ lý</a>
+    </section>
+}
+else
+{
+    <div class="article-grid">
+        @foreach (var a in Model.Articles)
+        {
+            <a class="card card-interactive article-card" asp-action="Details" asp-route-id="@a.Id">
+                <span class="badge badge-plain badge-info">@a.Category</span>
+                <h2>@a.Title</h2>
+                <p>@(a.Body.Length > 150 ? a.Body[..150] + "…" : a.Body)</p>
+                <span class="card-link">Đọc hướng dẫn <icon name="arrow-right" class="icon-sm" /></span>
+            </a>
+        }
+    </div>
+}

@@ -1,0 +1,66 @@
+@model CustomerSupportAI.ViewModels.UserEditViewModel
+@{
+    var isCustomers = Model.Portal == "Customers";
+    ViewData["Title"] = "Sửa tài khoản";
+}
+
+<a class="back-link" asp-controller="@Model.Portal" asp-action="Details" asp-route-id="@Model.Id"><icon name="arrow-left" class="icon-sm" />Chi tiết tài khoản</a>
+<div class="form-page">
+    <header class="page-header">
+        <div>
+            <span class="eyebrow">@(isCustomers ? "Quản lý khách hàng" : "Quản trị hệ thống")</span>
+            <h1>Sửa tài khoản</h1>
+            <p class="page-subtitle">Cập nhật thông tin, vai trò, trạng thái hoặc đặt lại mật khẩu.</p>
+        </div>
+    </header>
+    <form asp-controller="@Model.Portal" asp-action="Edit" asp-route-id="@Model.Id" method="post" class="card card-body form-stack">
+        <div asp-validation-summary="ModelOnly" class="validation-summary"></div>
+        <div class="form-grid">
+            <div class="field">
+                <label class="field-label is-required" asp-for="DisplayName">Họ và tên</label>
+                <input asp-for="DisplayName" autocomplete="off" maxlength="100" />
+                <span asp-validation-for="DisplayName" class="field-error"></span>
+            </div>
+            <div class="field">
+                <label class="field-label is-required" asp-for="Email">Email</label>
+                <input asp-for="Email" autocomplete="off" />
+                <span asp-validation-for="Email" class="field-error"></span>
+            </div>
+        </div>
+        <div class="field">
+            @if (Model.CanChangeRole)
+            {
+                <label class="field-label" asp-for="Role">Vai trò</label>
+                <select asp-for="Role">
+                    @foreach (var roleName in UserRoles.All)
+                    {
+                        <option value="@roleName">@DisplayText.Role(roleName)</option>
+                    }
+                </select>
+                <span asp-validation-for="Role" class="field-error"></span>
+            }
+            else
+            {
+                <span class="field-label">Vai trò</span>
+                <div class="readonly-value">@DisplayText.Role(Model.Role)@(Model.IsSelf ? " (tài khoản của bạn, không thể tự đổi)" : "")</div>
+            }
+        </div>
+        @if (!Model.IsSelf)
+        {
+            <label class="check"><input asp-for="IsActive" /> <span>Tài khoản đang hoạt động (bỏ chọn để khóa đăng nhập)</span></label>
+        }
+        <div class="field">
+            <label class="field-label" asp-for="NewPassword">Đặt lại mật khẩu</label>
+            <input asp-for="NewPassword" autocomplete="new-password" placeholder="Để trống nếu không đổi" />
+            <span class="field-hint">Tùy chọn. Ít nhất 10 ký tự nếu nhập.</span>
+            <span asp-validation-for="NewPassword" class="field-error"></span>
+        </div>
+        <div class="form-actions">
+            <span>Thay đổi được ghi vào nhật ký. Người dùng bị khóa hoặc đổi vai trò sẽ bị đăng xuất ngay.</span>
+            <div>
+                <a class="btn btn-secondary" asp-controller="@Model.Portal" asp-action="Details" asp-route-id="@Model.Id">Hủy</a>
+                <button class="btn btn-primary" type="submit"><icon name="check" />Lưu thay đổi</button>
+            </div>
+        </div>
+    </form>
+</div>

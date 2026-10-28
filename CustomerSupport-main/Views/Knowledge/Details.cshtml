@@ -1,0 +1,25 @@
+@model CustomerSupportAI.Models.KnowledgeArticle
+@{ ViewData["Title"] = Model.Title; }
+<a class="back-link" asp-action="Index"><icon name="arrow-left" class="icon-sm" />Kho hướng dẫn</a>
+<div class="form-page stack">
+    <article class="card article-body">
+        <span class="badge badge-plain badge-info">@Model.Category</span>
+        <h1>@Model.Title</h1>
+        <span class="muted"><icon name="calendar" class="icon-sm inline-icon" /> Cập nhật @Model.UpdatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy")</span>
+        <div class="article-content">@Model.Body</div>
+        @if (User.IsInRole(UserRoles.Admin))
+        {
+            <div class="form-actions section-gap">
+                <span>Bài viết được dùng làm nguồn trả lời cho trợ lý.</span>
+                <div><a class="btn btn-secondary" asp-action="Edit" asp-route-id="@Model.Id"><icon name="pencil" />Chỉnh sửa hướng dẫn</a></div>
+            </div>
+        }
+    </article>
+    <section class="card card-body help-strip">
+        <div>
+            <h2>Vẫn cần hỗ trợ thêm?</h2>
+            <p class="text-secondary">Trợ lý và đội ngũ hỗ trợ luôn có thể giúp bạn tiếp tục.</p>
+        </div>
+        <a class="btn btn-primary" asp-controller="Assistant" asp-action="Index"><icon name="sparkles" />Hỏi trợ lý</a>
+    </section>
+</div>

@@ -1,0 +1,93 @@
+@model CustomerSupportAI.ViewModels.UserListViewModel
+@{
+    ViewData["Title"] = "Quản lý khách hàng";
+    var filtered = Model.Search.Length > 0 || Model.Status.Length > 0;
+}
+
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Nhân viên hỗ trợ</span>
+        <h1>Quản lý khách hàng</h1>
+        <p class="page-subtitle">Xem hồ sơ, sửa thông tin, khóa hoặc xóa tài khoản khách hàng. Tổng cộng @Model.TotalCustomers khách hàng.</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-primary" asp-action="Create"><icon name="user-plus" />Thêm khách hàng</a>
+    </div>
+</header>
+
+<section class="card" aria-labelledby="customers-title">
+    <div class="card-header">
+        <div><h2 id="customers-title">Danh sách khách hàng</h2><p class="card-subtitle">Tìm theo tên, email hoặc số điện thoại; lọc theo trạng thái tài khoản.</p></div>
+    </div>
+    <form class="table-toolbar" method="get" asp-action="Index" role="search">
+        <input type="hidden" name="sort" value="@(Model.Sort == "id_desc" ? null : Model.Sort)" />
+        <label class="input-group">
+            <icon name="search" />
+            <span class="visually-hidden">Tìm khách hàng</span>
+            <input name="search" type="search" value="@Model.Search" placeholder="Tìm tên, email hoặc số điện thoại" />
+        </label>
+        <select name="status" aria-label="Lọc theo trạng thái">
+            <option value="">Tất cả trạng thái</option>
+            <option value="active" selected="@(Model.Status == "active" ? "selected" : null)">Hoạt động</option>
+            <option value="locked" selected="@(Model.Status == "locked" ? "selected" : null)">Đã khóa</option>
+        </select>
+        <button class="btn btn-secondary" type="submit"><icon name="filter" />Lọc</button>
+        @if (filtered)
+        {
+            <a class="btn btn-ghost" asp-action="Index"><icon name="x" />Xóa bộ lọc</a>
+        }
+    </form>
+    @if (Model.Users.Count == 0)
+    {
+        <div class="empty-state">
+            <span class="empty-icon"><icon name="@(filtered ? "search" : "users")" /></span>
+            <h3>@(filtered ? "Không có khách hàng phù hợp" : "Chưa có khách hàng nào")</h3>
+            <p>@(filtered ? "Hãy thử thay đổi từ khóa hoặc bộ lọc." : "Khách hàng tự đăng ký hoặc được thêm sẽ xuất hiện tại đây.")</p>
+            @if (!filtered)
+            {
+                <a class="btn btn-primary" asp-action="Create"><icon name="user-plus" />Thêm khách hàng</a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <partial name="_SortHeader" model='new SortHeader("Khách hàng", "name", Model.Sort)' />
+                        <partial name="_SortHeader" model='new SortHeader("Email", "email", Model.Sort)' />
+                        <th scope="col">Trạng thái</th>
+                        <th scope="col" class="num">Yêu cầu</th>
+                        <partial name="_SortHeader" model='new SortHeader("Ngày tham gia", "id", Model.Sort)' />
+                        <th scope="col"><span class="visually-hidden">Thao tác</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Users)
+                    {
+                        <tr>
+                            <td>
+                                <div class="person">
+                                    <span class="avatar avatar-sm">@item.User.DisplayName[..1].ToUpperInvariant()</span>
+                                    <div class="cell-main"><a asp-action="Details" asp-route-id="@item.User.Id">@item.User.DisplayName</a>@if (item.User.PhoneNumber is not null) {<span class="cell-sub">@item.User.PhoneNumber</span>}</div>
+                                </div>
+                            </td>
+                            <td>@item.User.Email</td>
+                            <td><span class="badge @(item.User.IsActive ? "badge-success" : "badge-danger")">@(item.User.IsActive ? "Hoạt động" : "Đã khóa")</span></td>
+                            <td class="num">@item.TicketCount</td>
+                            <td>@item.User.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("dd/MM/yyyy")</td>
+                            <td class="actions">
+                                <div class="row-actions">
+                                    <a class="btn btn-ghost btn-icon btn-sm" asp-action="Details" asp-route-id="@item.User.Id" aria-label="Xem @item.User.DisplayName" title="Xem"><icon name="eye" class="icon-sm" /></a>
+                                    <a class="btn btn-ghost btn-icon btn-sm" asp-action="Edit" asp-route-id="@item.User.Id" aria-label="Sửa @item.User.DisplayName" title="Sửa"><icon name="pencil" class="icon-sm" /></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <partial name="_Pagination" model="Model.Paging" />
+    }
+</section>

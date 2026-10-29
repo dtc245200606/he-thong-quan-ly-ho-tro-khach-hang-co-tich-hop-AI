@@ -33,12 +33,12 @@ Lệnh trực tiếp không tự bật LocalSetup. [.env.example](.env.example) 
 
 ## Tài khoản và role
 
-| Role | Quyền thực tế |
-|---|---|
-| Guest | Landing, đăng ký/đăng nhập, kho hướng dẫn công khai |
-| Customer | Tạo/tìm/xem/phản hồi ticket riêng; tổng quan/hoạt động riêng; trợ lý và chuyển chat thành ticket |
-| Staff | Đăng nhập tại màn hình chung `/Account/Login` (email hoặc số điện thoại), hệ thống tự nhận diện vai trò; xử lý mọi ticket, cập nhật trạng thái, danh mục, **mức ưu tiên** và **người phụ trách**; lọc hộp thư theo trạng thái, "chờ nhân viên phản hồi", danh mục, khách hàng, người phụ trách ("Giao cho tôi", "Chưa phân công"), ngày tạo; dùng **công cụ AI trong ticket** và **trợ lý CRM** (/Assistant); trả lời khách trong **Hội thoại chatbot**; **xem, thêm, sửa, khóa/mở khóa, xóa khách hàng** tại `/Customers`; không quản lý Staff/Admin |
-| Admin | Đăng nhập tại màn hình chung `/Account/Login`; xử lý ticket như Staff; **thêm/xem/sửa/khóa/xóa mọi tài khoản** (Admin, Staff, Customer) và đổi vai trò tại `/Admin/Users`; xem **nhật ký hoạt động** `/Admin/AuditLog`; tạo/sửa hướng dẫn; cấu hình/test Gemini |
+| Role     | Quyền thực tế                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guest    | Landing, đăng ký/đăng nhập, kho hướng dẫn công khai                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Customer | Tạo/tìm/xem/phản hồi ticket riêng; tổng quan/hoạt động riêng; trợ lý và chuyển chat thành ticket                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Staff    | Đăng nhập tại màn hình chung `/Account/Login` (email hoặc số điện thoại), hệ thống tự nhận diện vai trò; xử lý mọi ticket, cập nhật trạng thái, danh mục, **mức ưu tiên** và **người phụ trách**; lọc hộp thư theo trạng thái, "chờ nhân viên phản hồi", danh mục, khách hàng, người phụ trách ("Giao cho tôi", "Chưa phân công"), ngày tạo; dùng **công cụ AI trong ticket** và **trợ lý CRM** (/Assistant); trả lời khách trong **Hội thoại chatbot**; **xem, thêm, sửa, khóa/mở khóa, xóa khách hàng** tại `/Customers`; không quản lý Staff/Admin |
+| Admin    | Đăng nhập tại màn hình chung `/Account/Login`; xử lý ticket như Staff; **thêm/xem/sửa/khóa/xóa mọi tài khoản** (Admin, Staff, Customer) và đổi vai trò tại `/Admin/Users`; xem **nhật ký hoạt động** `/Admin/AuditLog`; tạo/sửa hướng dẫn; cấu hình/test Gemini                                                                                                                                                                                                                                                                                       |
 
 Mọi tài khoản đăng nhập có profile/đổi mật khẩu và lịch sử trợ lý riêng. Mọi vai trò đăng nhập tại một màn hình chung `/Account/Login` bằng email hoặc số điện thoại (khai báo khi đăng ký); máy chủ đọc vai trò trong DB rồi chuyển Khách hàng tới Tổng quan, Staff/Admin tới danh sách ticket. `/Account/StaffLogin` cũ chuyển hướng về trang này.
 
@@ -54,7 +54,6 @@ Mọi tài khoản đăng nhập có profile/đổi mật khẩu và lịch sử
 
 **Phân công ticket**: nhân viên chọn người phụ trách (nhân viên/quản trị đang hoạt động, kèm số yêu cầu đang mở) trong trang ticket; ghi nhật ký `ticket.assign`. Xóa tài khoản nhân viên → ticket về "Chưa phân công" (FK SET NULL), đổi nhân viên thành khách hàng → bỏ phân công các ticket của họ. Chưa có nhóm hỗ trợ, tệp đính kèm, ghi chú nội bộ trong ticket (ghi chú nội bộ chỉ có ở hội thoại chatbot) hay thanh toán. Sidebar nhóm theo Tổng quan · Hỗ trợ khách hàng · Trí tuệ nhân tạo, Admin có thêm Quản lý vận hành (danh sách nhân viên) và Hệ thống; dashboard dùng số liệu thật, Staff thấy thêm số ticket chờ phản hồi và thời gian phản hồi đầu tiên trung bình (từ lúc tạo ticket đến tin nhắn đầu tiên của nhân viên, với ticket tạo trong kỳ).
 
-
 ### Quên mật khẩu
 
 `/Account/ForgotPassword` (liên kết "Quên mật khẩu?" ở trang đăng nhập): nhập email hoặc số điện thoại → hệ thống gửi liên kết `/Account/ResetPassword?token=…` tới email của tài khoản.
@@ -66,6 +65,7 @@ Mọi tài khoản đăng nhập có profile/đổi mật khẩu và lịch sử
 - **Gửi email**: đặt `Smtp__Host`, `Smtp__Port` (mặc định 587), `Smtp__User`, `Smtp__Password`, `Smtp__From`, `Smtp__EnableSsl` (mặc định true). Nên đặt `App__BaseUrl` (ví dụ `https://support.congty.vn`) để liên kết không phụ thuộc Host header.
 - Chưa cấu hình SMTP: ở **Development** email được lưu thành tệp `.txt` trong `App_Data/mail-outbox` (đổi bằng `Mail__OutboxDirectory`; thư mục bị Git bỏ qua, chứa liên kết hợp lệ nên không chia sẻ); ở môi trường khác trang báo chưa cấu hình email và hướng dẫn liên hệ quản trị viên.
 - Bài hướng dẫn mẫu "Đăng nhập và bảo vệ tài khoản" chỉ được cập nhật cho DB mới; với DB đang có, Admin sửa bài này trong Kho hướng dẫn để trợ lý không trả lời rằng chưa có chức năng đặt lại.
+
 ## Gemini
 
 Admin mở /Settings, nhập key từ [Google AI Studio](https://aistudio.google.com/apikey), chọn model được cấp quyền, lưu và **Kiểm tra kết nối thực tế**. Default code `gemini-3.8-flash`; model đã lưu local có thể khác. Có key không đồng nghĩa API hoạt động.
@@ -80,7 +80,7 @@ Thiếu key/lỗi API/quota/timeout dùng **Tra cứu kho hướng dẫn** với
 
 Bảng "Trợ lý AI cho nhân viên" trong trang chi tiết ticket gọi `POST /Tickets/Ai/{id}` (`task` = `classify` | `draft` | `summary`, chung giới hạn 12 request/phút):
 
-- **Phân loại**: gợi ý danh mục (một trong 5 danh mục có sẵn), mức ưu tiên, lý do, **cảm xúc** (Tích cực/Trung lập/Lo lắng/Không hài lòng/Bức xúc) và **ý định** của khách; kèm **gợi ý người phụ trách** tính từ dữ liệu thật (nhân viên đang có ít yêu cầu mở nhất, không do AI đoán). Danh mục, mức ưu tiên và người phụ trách chỉ thay đổi khi nhân viên bấm *Áp dụng* và xác nhận trong hộp thoại; ghi nhật ký `ticket.category`, `ticket.priority`, `ticket.assign`.
+- **Phân loại**: gợi ý danh mục (một trong 5 danh mục có sẵn), mức ưu tiên, lý do, **cảm xúc** (Tích cực/Trung lập/Lo lắng/Không hài lòng/Bức xúc) và **ý định** của khách; kèm **gợi ý người phụ trách** tính từ dữ liệu thật (nhân viên đang có ít yêu cầu mở nhất, không do AI đoán). Danh mục, mức ưu tiên và người phụ trách chỉ thay đổi khi nhân viên bấm _Áp dụng_ và xác nhận trong hộp thoại; ghi nhật ký `ticket.category`, `ticket.priority`, `ticket.assign`.
 - **Soạn nháp phản hồi**: dựa trên lịch sử và tối đa 3 bài hướng dẫn liên quan; cấm hứa hoàn tiền/bồi thường/thời hạn không có trong hướng dẫn. Nhân viên sửa, sao chép, tạo lại hoặc chèn vào ô phản hồi; sau khi chèn phải tick xác nhận đã xem lại mới gửi được.
 - **Tóm tắt lịch sử**: vấn đề, các bước đã thử, phản hồi quan trọng, hiện trạng, việc cần làm, thông tin còn thiếu.
 
@@ -94,28 +94,28 @@ Dữ liệu gửi Gemini: tiêu đề, danh mục, trạng thái, tin nhắn đ�
 
 Khách vãng lai và khách hàng đã đăng nhập có nút **Hỗ trợ trực tuyến** ở góc phải mỗi trang (`Views/Shared/_ChatWidget.cshtml`, `wwwroot/js/chat-widget.js`). Hỏi FAQ không cần đăng nhập. Luồng xử lý: widget → `ChatController` (`/api/chat/sessions`) → `ChatbotService` → nhà cung cấp AI (`Services/ChatProviders.cs`) → công cụ backend → SQLite.
 
-**Nhà cung cấp (chạy bằng API key)**: Admin chọn tại /Settings → *Chatbot hỗ trợ trên website*: `auto` (Groq nếu có key, rồi Gemini, cuối cùng Mock), `groq` (API key Groq tại console.groq.com/keys, gọi Chat Completions chuẩn OpenAI có function calling, model mặc định `openai/gpt-oss-120b`; có thể đổi sang model Groq khác hỗ trợ gọi công cụ như `llama-3.3-70b-versatile`), `gemini` (dùng chung key Gemini ở trên), `mock` (không gọi AI, dùng cho phát triển/kiểm thử). Key Groq được mã hóa như key Gemini; cũng nhận `Groq__ApiKey`/`GROQ_API_KEY`. Trang Trợ lý AI (/Assistant) và công cụ AI trong ticket vẫn dùng Gemini. Khi AI thật lỗi và bật dự phòng, chatbot dùng Mock và gắn nhãn "Chế độ dự phòng · không phải AI"; nhật ký ghi rõ việc dự phòng.
+**Nhà cung cấp (chạy bằng API key)**: Admin chọn tại /Settings → _Chatbot hỗ trợ trên website_: `auto` (Groq nếu có key, rồi Gemini, cuối cùng Mock), `groq` (API key Groq tại console.groq.com/keys, gọi Chat Completions chuẩn OpenAI có function calling, model mặc định `openai/gpt-oss-120b`; có thể đổi sang model Groq khác hỗ trợ gọi công cụ như `llama-3.3-70b-versatile`), `gemini` (dùng chung key Gemini ở trên), `mock` (không gọi AI, dùng cho phát triển/kiểm thử). Key Groq được mã hóa như key Gemini; cũng nhận `Groq__ApiKey`/`GROQ_API_KEY`. Trang Trợ lý AI (/Assistant) và công cụ AI trong ticket vẫn dùng Gemini. Khi AI thật lỗi và bật dự phòng, chatbot dùng Mock và gắn nhãn "Chế độ dự phòng · không phải AI"; nhật ký ghi rõ việc dự phòng.
 
 **Công cụ AI được phép** (AI không truy cập DB trực tiếp, tối đa 4 vòng công cụ/tin nhắn):
 
-| Công cụ | Quy tắc backend |
-|---|---|
-| `search_faq(query)` | Tìm trong Kho hướng dẫn bằng `KnowledgeSearch` hiện có |
-| `get_ticket_status(ticket_id)` | Cần email phiên (hoặc tài khoản đăng nhập); chỉ trả ticket thuộc email đó; mã không tồn tại và mã của người khác nhận cùng một thông báo |
+| Công cụ                                                 | Quy tắc backend                                                                                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_faq(query)`                                     | Tìm trong Kho hướng dẫn bằng `KnowledgeSearch` hiện có                                                                                                              |
+| `get_ticket_status(ticket_id)`                          | Cần email phiên (hoặc tài khoản đăng nhập); chỉ trả ticket thuộc email đó; mã không tồn tại và mã của người khác nhận cùng một thông báo                            |
 | `create_ticket(title, description, category, priority)` | Kiểm tra độ dài, danh mục (5 danh mục hiện có) và ưu tiên (Thấp/Trung bình/Cao/Khẩn cấp); kênh `chat`; một phiên chỉ một ticket đang mở (gọi lặp lại trả ticket cũ) |
-| `handoff_to_human(reason, urgent)` | Tạo/dùng lại ticket, ghi lý do và hội thoại gần đây, `urgent` → ưu tiên Khẩn cấp; phiên chuyển sang chế độ nhân viên, bot ngừng trả lời |
+| `handoff_to_human(reason, urgent)`                      | Tạo/dùng lại ticket, ghi lý do và hội thoại gần đây, `urgent` → ưu tiên Khẩn cấp; phiên chuyển sang chế độ nhân viên, bot ngừng trả lời                             |
 
-**Xác nhận email (khách vãng lai)**: email nhập ở widget hoặc trong tin nhắn được lưu vào phiên ở trạng thái *chưa xác nhận*, hệ thống gửi liên kết `/Chat/Verify?token=…` (ký bằng Data Protection, hiệu lực 24 giờ, chỉ đúng với email hiện tại của phiên). Trước khi khách bấm liên kết, `get_ticket_status`, `create_ticket` và `handoff_to_human` đều trả `email_unverified`, không đọc hay tạo dữ liệu nào. Tối đa 3 email xác nhận/phiên và 5 email/15 phút/IP. Dùng chung cấu hình gửi mail với *Quên mật khẩu* (Development không có SMTP thì ghi vào `App_Data/mail-outbox`); môi trường khác chưa cấu hình SMTP thì khách cần đăng nhập. Khách hàng đã đăng nhập được xác minh bằng tài khoản. Sau khi xác nhận, email chưa có tài khoản sẽ được tạo tài khoản khách hàng (mật khẩu ngẫu nhiên, nhận lại bằng *Quên mật khẩu*, ghi nhật ký `chat.customer-create`). Email của nhân viên/quản trị hoặc tài khoản bị khóa bị từ chối.
+**Xác nhận email (khách vãng lai)**: email nhập ở widget hoặc trong tin nhắn được lưu vào phiên ở trạng thái _chưa xác nhận_, hệ thống gửi liên kết `/Chat/Verify?token=…` (ký bằng Data Protection, hiệu lực 24 giờ, chỉ đúng với email hiện tại của phiên). Trước khi khách bấm liên kết, `get_ticket_status`, `create_ticket` và `handoff_to_human` đều trả `email_unverified`, không đọc hay tạo dữ liệu nào. Tối đa 3 email xác nhận/phiên và 5 email/15 phút/IP. Dùng chung cấu hình gửi mail với _Quên mật khẩu_ (Development không có SMTP thì ghi vào `App_Data/mail-outbox`); môi trường khác chưa cấu hình SMTP thì khách cần đăng nhập. Khách hàng đã đăng nhập được xác minh bằng tài khoản. Sau khi xác nhận, email chưa có tài khoản sẽ được tạo tài khoản khách hàng (mật khẩu ngẫu nhiên, nhận lại bằng _Quên mật khẩu_, ghi nhật ký `chat.customer-create`). Email của nhân viên/quản trị hoặc tài khoản bị khóa bị từ chối.
 
-**SLA phản hồi đầu**: hạn = thời điểm tạo + số giờ theo mức ưu tiên (mục `Sla:FirstResponseHours` trong appsettings.json, mặc định Khẩn cấp 4h, Cao 8h, Trung bình 24h, Thấp 72h; tính theo giờ lịch, chưa trừ ngoài giờ làm việc). Ticket tạo từ form web mặc định *Trung bình*; ticket từ chatbot theo mức AI chọn, chuyển nhân viên khẩn cấp → *Khẩn cấp*. Nhân viên đổi mức ưu tiên trong trang ticket (ghi nhật ký `ticket.priority`), hạn được tính lại. Trang ticket và console chat hiện *Hạn phản hồi đầu / Quá hạn / Đạt / Trễ SLA*; danh sách ticket đánh dấu *Quá hạn SLA*. Ticket cũ (trước khi có cột) không có ưu tiên nên không có SLA cho tới khi nhân viên đặt.
+**SLA phản hồi đầu**: hạn = thời điểm tạo + số giờ theo mức ưu tiên (mục `Sla:FirstResponseHours` trong appsettings.json, mặc định Khẩn cấp 4h, Cao 8h, Trung bình 24h, Thấp 72h; tính theo giờ lịch, chưa trừ ngoài giờ làm việc). Ticket tạo từ form web mặc định _Trung bình_; ticket từ chatbot theo mức AI chọn, chuyển nhân viên khẩn cấp → _Khẩn cấp_. Nhân viên đổi mức ưu tiên trong trang ticket (ghi nhật ký `ticket.priority`), hạn được tính lại. Trang ticket và console chat hiện _Hạn phản hồi đầu / Quá hạn / Đạt / Trễ SLA_; danh sách ticket đánh dấu _Quá hạn SLA_. Ticket cũ (trước khi có cột) không có ưu tiên nên không có SLA cho tới khi nhân viên đặt.
 
 **Bảo vệ dữ liệu**: trước khi gửi AI, email/số điện thoại/số thẻ ≥12 chữ số/CMND-CCCD/mật khẩu/OTP được thay bằng `[ĐÃ_ẨN_…]` (cả tin nhắn, lịch sử và kết quả công cụ). Phản hồi AI được kiểm tra: xin mật khẩu/OTP/CVV → thay bằng thông báo an toàn; hứa hoàn tiền/bồi thường/giảm giá → thêm cảnh báo cần nhân viên xem xét; tự nhận "đã tạo yêu cầu" khi backend chưa lưu → bị thay. System prompt ở `Prompts/chatbot_system.txt`. Bảng `AiLogs` lưu nhà cung cấp, dự phòng, thời gian, số mục đã ẩn, danh sách công cụ — không lưu nội dung.
 
 **Giới hạn** (mục `Chatbot` trong appsettings.json): 10 tin/phút/phiên, 20 phiên/phút/IP, 1.000 ký tự/tin, 4 vòng công cụ. Phiên được xác thực bằng token ngẫu nhiên (DB chỉ lưu SHA-256) và gắn với tài khoản đang đăng nhập.
 
-**Nhân viên**: menu *Hội thoại chatbot* (`/ChatAdmin`, Staff/Admin) lọc theo trạng thái, xem hội thoại tự cập nhật 4 giây/lần, mở ticket liên quan, gửi **phản hồi công khai** (hiện trong khung chat của khách và lưu vào ticket) hoặc **ghi chú nội bộ** (không bao giờ trả về API khách). Phản hồi viết trong màn hình ticket cũng tự hiện trong khung chat. Admin xem thêm nhật ký công cụ AI. API: `GET /api/chat/admin/sessions?status=`, `GET /api/chat/admin/sessions/{id}`, `POST …/{id}/replies`, `POST …/{id}/status`; chưa đăng nhập → 401, khách hàng → 403.
+**Nhân viên**: menu _Hội thoại chatbot_ (`/ChatAdmin`, Staff/Admin) lọc theo trạng thái, xem hội thoại tự cập nhật 4 giây/lần, mở ticket liên quan, gửi **phản hồi công khai** (hiện trong khung chat của khách và lưu vào ticket) hoặc **ghi chú nội bộ** (không bao giờ trả về API khách). Phản hồi viết trong màn hình ticket cũng tự hiện trong khung chat. Admin xem thêm nhật ký công cụ AI. API: `GET /api/chat/admin/sessions?status=`, `GET /api/chat/admin/sessions/{id}`, `POST …/{id}/replies`, `POST …/{id}/status`; chưa đăng nhập → 401, khách hàng → 403.
 
-**CSDL**: thêm bảng `ChatSessions`, `ChatMessages`, `AiLogs` và cột `Tickets.Priority` (null cho ticket cũ), `Tickets.Channel` (mặc định `web`), `Tickets.SlaDueAt` theo kiểu bổ sung khi khởi động; dữ liệu cũ giữ nguyên. Ticket hiện ưu tiên (cho nhân viên) và nhãn *Tiếp nhận qua chatbot*.
+**CSDL**: thêm bảng `ChatSessions`, `ChatMessages`, `AiLogs` và cột `Tickets.Priority` (null cho ticket cũ), `Tickets.Channel` (mặc định `web`), `Tickets.SlaDueAt` theo kiểu bổ sung khi khởi động; dữ liệu cũ giữ nguyên. Ticket hiện ưu tiên (cho nhân viên) và nhãn _Tiếp nhận qua chatbot_.
 
 ## Dữ liệu mẫu (demo)
 
@@ -202,17 +202,17 @@ Xem [docs/12-Deployment](docs/12-Deployment.md) (sao lưu volume, HTTPS qua reve
 
 ## Tài liệu môn học
 
-| Tài liệu | Nội dung |
-|---|---|
-| [01](docs/01-Phan-tich-bai-toan.md) | Phân tích/phạm vi |
-| [02](docs/02-Yeu-cau-chuc-nang.md), [03](docs/03-Yeu-cau-phi-chuc-nang.md) | Yêu cầu chức năng/phi chức năng |
-| [04](docs/04-Use-Case.md) | Actor/use case/Mermaid |
-| [05](docs/05-Thiet-ke-CSDL.md) | 5 bảng, PK/FK/ràng buộc/ERD |
-| [06](docs/06-Kien-truc-he-thong.md) | Kiến trúc MVC/luồng dữ liệu |
-| [07](docs/07-Thiet-ke-AI.md), [08](docs/08-Prompt-AI.md), [09](docs/09-Nhat-ky-su-dung-AI.md) | AI/prompt/nhật ký trung thực |
-| [10](docs/10-Ke-hoach-trien-khai.md) | Kế hoạch/demo |
-| [11](docs/11-Test-Cases.md) | Test đúng/sai/biên và kết quả |
-| [12](docs/12-Deployment.md) | Deployment/backup/restore |
-| [ai-evidence](docs/ai-evidence/README.md) | 3 vòng prompt chưa chạy, có phiếu điền output/ảnh |
+| Tài liệu                                                                                      | Nội dung                                          |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| [01](docs/01-Phan-tich-bai-toan.md)                                                           | Phân tích/phạm vi                                 |
+| [02](docs/02-Yeu-cau-chuc-nang.md), [03](docs/03-Yeu-cau-phi-chuc-nang.md)                    | Yêu cầu chức năng/phi chức năng                   |
+| [04](docs/04-Use-Case.md)                                                                     | Actor/use case/Mermaid                            |
+| [05](docs/05-Thiet-ke-CSDL.md)                                                                | 5 bảng, PK/FK/ràng buộc/ERD                       |
+| [06](docs/06-Kien-truc-he-thong.md)                                                           | Kiến trúc MVC/luồng dữ liệu                       |
+| [07](docs/07-Thiet-ke-AI.md), [08](docs/08-Prompt-AI.md), [09](docs/09-Nhat-ky-su-dung-AI.md) | AI/prompt/nhật ký trung thực                      |
+| [10](docs/10-Ke-hoach-trien-khai.md)                                                          | Kế hoạch/demo                                     |
+| [11](docs/11-Test-Cases.md)                                                                   | Test đúng/sai/biên và kết quả                     |
+| [12](docs/12-Deployment.md)                                                                   | Deployment/backup/restore                         |
+| [ai-evidence](docs/ai-evidence/README.md)                                                     | 3 vòng prompt chưa chạy, có phiếu điền output/ảnh |
 
 Bạn cần bổ sung ảnh demo, chạy 3 vòng prompt, các test thủ công còn thiếu và đối chiếu rubric giảng viên. Project chưa deploy public, không tuyên bố điểm khi chưa có đề chấm đầy đủ.

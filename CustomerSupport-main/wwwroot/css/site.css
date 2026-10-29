@@ -103,10 +103,22 @@ html[data-sidebar="collapsed"] .nav-link[data-tooltip]:focus-visible::after {
 .workspace { display: flex; min-width: 0; flex-direction: column; }
 .topbar {
   position: sticky; top: 0; z-index: var(--z-sticky); display: flex; align-items: center; gap: var(--space-4); height: var(--topbar-height);
-  padding: 0 var(--space-6); border-bottom: 1px solid var(--color-border); background: rgba(255, 255, 255, .86);
-  -webkit-backdrop-filter: saturate(180%) blur(10px); backdrop-filter: saturate(180%) blur(10px);
+  /* Brand navy like the sidebar and the public header, so the bar stands apart from the light page. */
+  padding: 0 var(--space-6); border-bottom: 1px solid var(--navy-800); background: var(--sidebar-bg); box-shadow: var(--shadow-sm);
 }
 .topbar .topbar-menu { display: none; }
+/* Light-on-navy for the controls sitting on the bar only; the dropdown panels below keep their light styling. */
+.topbar .breadcrumb, .topbar .breadcrumb a { color: var(--sidebar-text-muted); }
+.topbar .breadcrumb a:hover, .topbar .breadcrumb li:last-child { color: #fff; }
+.topbar .breadcrumb .icon { color: var(--sidebar-text-muted); }
+.topbar .topbar-search .icon { color: var(--sidebar-text-muted); }
+.topbar .topbar-search input { color: #fff; border-color: rgba(255, 255, 255, .16); background: rgba(255, 255, 255, .08); }
+.topbar .topbar-search input::placeholder { color: var(--sidebar-text-muted); }
+.topbar .topbar-search input:focus { border-color: var(--blue-300); background: rgba(255, 255, 255, .12); }
+.topbar .icon-trigger, .topbar .topbar-menu { color: rgba(255, 255, 255, .86); }
+.topbar .icon-trigger:hover, .topbar .topbar-menu:hover, .topbar .user-trigger:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.topbar .user-trigger-text strong { color: #fff; }
+.topbar .user-trigger-text small, .topbar .user-trigger > .icon { color: var(--sidebar-text-muted); }
 .breadcrumb { display: flex; min-width: 0; align-items: center; gap: var(--space-2); margin: 0; padding: 0; list-style: none; color: var(--color-text-muted); font-size: var(--text-sm); }
 .breadcrumb li { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
 .breadcrumb li:last-child { min-width: 0; overflow: hidden; color: var(--color-text); font-weight: var(--weight-medium); text-overflow: ellipsis; }
@@ -136,13 +148,15 @@ html[data-sidebar="collapsed"] .nav-link[data-tooltip]:focus-visible::after {
 .public-shell { display: flex; min-height: 100vh; flex-direction: column; }
 .public-header {
   position: sticky; top: 0; z-index: var(--z-sticky); display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
-  height: 64px; padding: 0 max(var(--space-6), calc((100% - 1200px) / 2)); border-bottom: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, .88); -webkit-backdrop-filter: saturate(180%) blur(10px); backdrop-filter: saturate(180%) blur(10px);
+  height: 64px; padding: 0 max(var(--space-6), calc((100% - 1200px) / 2)); border-bottom: 1px solid var(--navy-800);
+  /* Brand navy (same as the signed-in sidebar) so the bar stands apart from the light page background. */
+  background: var(--sidebar-bg); box-shadow: var(--shadow-sm);
 }
-.public-header .brand-text strong { color: var(--color-text); }
-.public-header .brand-text small { color: var(--color-text-muted); }
+.public-header .brand-text strong { color: #fff; }
+.public-header .brand-text small { color: var(--sidebar-text-muted); }
 .public-nav { display: flex; align-items: center; gap: var(--space-2); }
-.public-nav .btn-ghost { color: var(--color-text-secondary); }
+.public-nav .btn-ghost { color: rgba(255, 255, 255, .86); }
+.public-nav .btn-ghost:hover { color: #fff; background: rgba(255, 255, 255, .1); }
 .public-main { width: 100%; max-width: 1200px; margin: 0 auto; padding: var(--space-10) var(--space-6); flex: 1; }
 .public-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); padding: var(--space-6) max(var(--space-6), calc((100% - 1200px) / 2)); border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--text-sm); background: var(--color-surface); }
 

@@ -32,7 +32,7 @@ try{
   foreach(var cookie in JsonNode.Parse(File.ReadAllText(args[3]))!.AsArray())await cdp.Call("Network.setCookie",new{name=cookie!["Name"]!.GetValue<string>(),value=cookie["Value"]!.GetValue<string>(),url=baseUrl,path="/",httpOnly=true});
   foreach(var mode in new[]{("desktop",1440,1050,false),("mobile",390,1000,true)}){
    await cdp.Call("Emulation.setDeviceMetricsOverride",new{width=mode.Item2,height=mode.Item3,deviceScaleFactor=1,mobile=mode.Item4});
-   foreach(var page in new[]{("staff-dashboard","/Dashboard"),("staff-tickets","/Tickets"),("staff-ticket","/"+args[4].TrimStart('/')),("staff-customers","/Customers")}){
+   foreach(var page in new[]{("staff-dashboard","/Dashboard"),("staff-tickets","/Tickets"),("staff-ticket","/"+args[4].TrimStart('/')),("staff-customers","/Customers"),("staff-chats","/ChatAdmin")}){
     await cdp.Call("Page.navigate",new{url=baseUrl+page.Item2});await Task.Delay(700);
     var check=await cdp.Call("Runtime.evaluate",new{expression="({scroll:document.documentElement.scrollWidth,error:document.body.innerText.includes('An unhandled exception'),signedOut:location.pathname.startsWith('/Account/Login'),ai:!!document.querySelector('[data-ai-endpoint]')})",returnByValue=true});var v=check.GetProperty("result").GetProperty("value");
     if(v.GetProperty("error").GetBoolean()||v.GetProperty("signedOut").GetBoolean())throw new Exception("Staff page failed: "+page.Item1+" "+v);
@@ -82,6 +82,32 @@ try{
  await cdp.Call("Network.clearBrowserCookies",new{});await cdp.Call("Emulation.setDeviceMetricsOverride",new{width=390,height=1000,deviceScaleFactor=1,mobile=true});await cdp.Call("Page.navigate",new{url=baseUrl});await Task.Delay(700);
  var landing=await cdp.Call("Runtime.evaluate",new{expression="document.documentElement.scrollWidth <= innerWidth",returnByValue=true});var shot=await cdp.Call("Page.captureScreenshot",new{format="png"});await File.WriteAllBytesAsync(Path.Combine(output,"landing-mobile.png"),Convert.FromBase64String(shot.GetProperty("data").GetString()!));
  if(!landing.GetProperty("result").GetProperty("value").GetBoolean())throw new Exception("Mobile landing overflows");Console.WriteLine("PASS: public mobile landing without overflow");
+ // Guest chat widget: open it, ask a FAQ question against the real server (mock provider) and check the panel fits.
+ foreach(var mode in new[]{("desktop",1440,1050,false),("mobile",390,800,true)}){
+  await cdp.Call("Emulation.setDeviceMetricsOverride",new{width=mode.Item2,height=mode.Item3,deviceScaleFactor=1,mobile=mode.Item4});
+  await cdp.Call("Page.navigate",new{url=baseUrl+"/Knowledge"});await Task.Delay(700);
+  const string chatScript="""
+   (async () => {
+     sessionStorage.clear();
+     document.querySelector('.cw-launcher').click();
+     const panel = document.querySelector('#cw-panel'), input = document.querySelector('#cw-input');
+     input.value = 'Làm thế nào để đổi mật khẩu tài khoản?';
+     document.querySelector('#cw-form').requestSubmit();
+     for (let i = 0; i < 40 && !document.querySelector('#cw-messages .chat-bubble.md'); i++) await new Promise(r => setTimeout(r, 250));
+     const bot = [...document.querySelectorAll('#cw-messages .chat-bubble.md')].map(b => b.textContent).join(' ');
+     const r = panel.getBoundingClientRect();
+     return JSON.stringify({ open: !panel.hidden, answered: bot.includes('Đăng nhập và bảo vệ tài khoản'),
+       fits: r.left >= -1 && r.right <= innerWidth + 1 && r.top >= -1 && r.bottom <= innerHeight + 1,
+       noOverflow: document.documentElement.scrollWidth <= innerWidth + 1, bot: bot.slice(0, 120) });
+   })()
+   """;
+  var chatRun=await cdp.Call("Runtime.evaluate",new{expression=chatScript,awaitPromise=true,returnByValue=true});
+  var chat=JsonNode.Parse(chatRun.GetProperty("result").GetProperty("value").GetString()!)!.AsObject();
+  var chatShot=await cdp.Call("Page.captureScreenshot",new{format="png",captureBeyondViewport=false});await File.WriteAllBytesAsync(Path.Combine(output,"chat-widget-"+mode.Item1+".png"),Convert.FromBase64String(chatShot.GetProperty("data").GetString()!));
+  foreach(var key in new[]{"open","answered","fits","noOverflow"})if(chat[key]?.GetValue<bool>()!=true)throw new Exception("FAILED: chat widget "+mode.Item1+" "+key+" "+chat.ToJsonString());
+  Console.WriteLine("PASS: chat widget "+mode.Item1+" opens, answers a FAQ and fits the screen");
+  await cdp.Call("Runtime.evaluate",new{expression="sessionStorage.clear()"});
+ }
  foreach(var page in new[]{("login","/Account/Login"),("forgot-password","/Account/ForgotPassword"),("reset-invalid","/Account/ResetPassword?token=invalid")}){
   await cdp.Call("Page.navigate",new{url=baseUrl+page.Item2});await Task.Delay(500);
   var fits=await cdp.Call("Runtime.evaluate",new{expression="document.documentElement.scrollWidth <= innerWidth && !document.body.innerText.includes('An unhandled exception')",returnByValue=true});var pageShot=await cdp.Call("Page.captureScreenshot",new{format="png"});await File.WriteAllBytesAsync(Path.Combine(output,page.Item1+"-mobile.png"),Convert.FromBase64String(pageShot.GetProperty("data").GetString()!));

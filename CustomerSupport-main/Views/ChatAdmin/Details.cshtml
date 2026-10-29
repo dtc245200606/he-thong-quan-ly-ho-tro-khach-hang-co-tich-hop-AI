@@ -1,0 +1,49 @@
+@model CustomerSupportAI.Models.ChatSession
+@{
+    ViewData["Title"] = $"Hội thoại #{Model.Id}";
+    var isAdmin = User.IsInRole(UserRoles.Admin);
+}
+
+<a class="back-link" href="@Url.Action("Index")"><icon name="arrow-left" class="icon-sm" />Hội thoại chatbot</a>
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Chatbot website</span>
+        <h1>Hội thoại #@Model.Id</h1>
+        <p class="page-subtitle" id="cc-subtitle">Đang tải…</p>
+    </div>
+</header>
+
+<div class="chat-console" id="chat-console" data-api="@Url.Content($"~/api/chat/admin/sessions/{Model.Id}")" data-admin="@(isAdmin ? "true" : "false")">
+    <form id="cc-csrf" class="visually-hidden">@Html.AntiForgeryToken()</form>
+    <section class="card chat-console-thread" aria-label="Nội dung hội thoại">
+        <div class="cw-messages" id="cc-messages" aria-live="polite"></div>
+        <form class="chat-console-reply" id="cc-form">
+            <label class="field-label" for="cc-body">Trả lời khách hàng</label>
+            <textarea id="cc-body" maxlength="4000" placeholder="Nhập phản hồi công khai hoặc ghi chú nội bộ…" required></textarea>
+            <div class="chat-console-actions">
+                <span class="field-hint">Phản hồi công khai hiển thị ngay trong khung chat của khách và được lưu vào yêu cầu liên quan. Ghi chú nội bộ chỉ nhân viên thấy.</span>
+                <div>
+                    <button class="btn btn-secondary" type="submit" value="internal"><icon name="lock" />Ghi chú nội bộ</button>
+                    <button class="btn btn-primary" type="submit" value="public"><icon name="send" />Gửi cho khách</button>
+                </div>
+            </div>
+        </form>
+    </section>
+    <aside class="stack" aria-label="Thông tin hội thoại">
+        <section class="card card-body">
+            <dl class="chat-facts" id="cc-facts"></dl>
+            <div class="chat-console-actions section-gap">
+                <a class="btn btn-secondary btn-sm" id="cc-ticket" hidden><icon name="ticket" />Mở yêu cầu</a>
+                <button class="btn btn-ghost btn-sm" type="button" id="cc-close"><icon name="circle-check" />Kết thúc hội thoại</button>
+            </div>
+        </section>
+        @if (isAdmin)
+        {
+            <section class="card">
+                <div class="card-header"><div><h2>Nhật ký AI</h2><p class="card-subtitle">Công cụ đã gọi, nhà cung cấp, dự phòng và số dữ liệu cá nhân đã ẩn. Không lưu nội dung tin nhắn.</p></div></div>
+                <div class="card-body"><ol class="chat-log" id="cc-logs"></ol></div>
+            </section>
+        }
+    </aside>
+</div>
+@section Scripts{<script src="~/js/chat-console.js" asp-append-version="true"></script>}

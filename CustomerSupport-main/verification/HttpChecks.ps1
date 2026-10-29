@@ -11,7 +11,7 @@ $random = [Security.Cryptography.RandomNumberGenerator]::Create()
 $random.GetBytes($randomBytes)
 $random.Dispose()
 $password = [Convert]::ToBase64String($randomBytes) + 'aA1!'
-$environmentNames = @('ConnectionStrings__DefaultConnection','ASPNETCORE_ENVIRONMENT','BootstrapAdmin__Email','BootstrapAdmin__Password','Gemini__ApiKey','AiSettings__StorageDirectory','Logging__LogLevel__Default','Mail__OutboxDirectory','Smtp__Host')
+$environmentNames = @('ConnectionStrings__DefaultConnection','ASPNETCORE_ENVIRONMENT','BootstrapAdmin__Email','BootstrapAdmin__Password','Gemini__ApiKey','AiSettings__StorageDirectory','Logging__LogLevel__Default','Mail__OutboxDirectory','Smtp__Host','Chatbot__Provider','Groq__ApiKey')
 $savedEnvironment = @{}
 foreach ($name in $environmentNames) { $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Check($condition, $name) { if (!$condition) { throw "FAILED: $name" }; Write-Output "PASS: $name" }
@@ -31,6 +31,8 @@ try {
     $outbox = Join-Path $run 'mail-outbox'
     $env:Mail__OutboxDirectory = $outbox
     $env:Smtp__Host = ''
+    $env:Chatbot__Provider = 'mock'
+    $env:Groq__ApiKey = ''
     $env:Logging__LogLevel__Default = 'Warning'
     $dll = Join-Path $projectRoot 'bin\Debug\net10.0\CustomerSupportAI.dll'
     $server = Start-Process -FilePath 'dotnet' -ArgumentList @('"' + $dll + '"', '--urls', $base) -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $run 'server.log') -RedirectStandardError (Join-Path $run 'server-error.log') -PassThru
@@ -185,7 +187,110 @@ try {
     $limited = $false
     for ($i=0; $i -lt 14; $i++) { if ((StatusOf { JsonPost '/Assistant/Ask' $two @{message='Tạo yêu cầu hỗ trợ'} $token }) -eq 429) { $limited=$true;break } }
     Check $limited 'assistant request limit enforced'
-    Write-Output 'All HTTP checks passed. Production database was not modified.'
+    # Website chatbot (mock provider, isolated DB): public API, permissions, handoff, staff console, rate limits.
+    function ChatApi($method, $path, $session, $csrf, $chatToken, $payload) {
+        $headers = @{RequestVerificationToken=$csrf}
+        if ($chatToken) { $headers['X-Chat-Token'] = $chatToken }
+        $params = @{Uri=($base + $path); WebSession=$session; Method=$method; Headers=$headers; UseBasicParsing=$true}
+        if ($payload) { $params['ContentType'] = 'application/json; charset=utf-8'; $params['Body'] = [Text.Encoding]::UTF8.GetBytes(($payload | ConvertTo-Json)) }
+        Invoke-WebRequest @params
+    }
+    function NewChat($session, $csrf) { (ChatApi 'POST' '/api/chat/sessions' $session $csrf).Content | ConvertFrom-Json }
+    function Say($chat, $session, $csrf, $text) { (ChatApi 'POST' "/api/chat/sessions/$($chat.id)/messages" $session $csrf $chat.token @{message=$text}).Content | ConvertFrom-Json }
+    $guest = & $newSession
+    $landing = Page '/' $guest
+    Check ($landing.Content -match 'id="chat-widget"') 'chat widget rendered for guests'
+    Check ((Page '/Tickets' $staffSession).Content -notmatch 'id="chat-widget"') 'chat widget hidden for staff'
+    $guestCsrf = Token $landing
+    Check ((StatusOf { ChatApi 'POST' '/api/chat/sessions' $guest 'invalid' }) -eq 400) 'chat API requires the CSRF token'
+    $chat = NewChat $guest $guestCsrf
+    Check ((StatusOf { ChatApi 'GET' "/api/chat/sessions/$($chat.id)" $guest $guestCsrf 'wrong-token' }) -eq 404) 'chat session refuses a wrong session token'
+    $faq = Say $chat $guest $guestCsrf 'Làm thế nào để đổi mật khẩu tài khoản?'
+    Check ((@($faq.messages | Where-Object sender -eq 'bot')[0].body) -match 'Đăng nhập và bảo vệ tài khoản') 'chatbot answers FAQ without sign-in'
+    Check ((StatusOf { Say $chat $guest $guestCsrf ('x' * 1001) }) -eq 400) 'chat message over 1000 characters rejected'
+    $ticketNumber = [regex]::Match((Page "/Tickets/Details/$ticketId" $one).Content, '<title>(CS-[0-9A-Z-]+)').Groups[1].Value
+    $lookup = Say $chat $guest $guestCsrf "Trạng thái yêu cầu $ticketNumber"
+    Check ($lookup.needsEmail -eq $true) 'ticket lookup asks a guest for an email first'
+    # Guest emails must be confirmed through the emailed link before private data is used.
+    function ConfirmChat($address, $session) {
+        $pattern = '*' + ($address -replace '[^a-zA-Z0-9]', '_') + '*'
+        $link = $null
+        for ($i=0; $i -lt 30 -and !$link; $i++) {
+            Start-Sleep -Milliseconds 200
+            foreach ($file in @(Get-ChildItem $outbox -Filter $pattern -ErrorAction SilentlyContinue)) {
+                $found = [regex]::Match([IO.File]::ReadAllText($file.FullName), '/Chat/Verify\?token=\S+').Value
+                if ($found) { $link = $found }
+            }
+        }
+        if (!$link) { throw "FAILED: no chat confirmation email for $address" }
+        Page $link $session
+    }
+    $null = ChatApi 'PUT' "/api/chat/sessions/$($chat.id)/contact" $guest $guestCsrf $chat.token @{email='one@test.local'}
+    $pending = Say $chat $guest $guestCsrf "Trạng thái yêu cầu $ticketNumber"
+    $pendingReply = @($pending.messages | Where-Object sender -eq 'bot')[0].body
+    Check ($pendingReply -match 'xác nhận' -and $pendingReply -notmatch 'Đã đóng' -and $pending.state.emailVerified -eq $false) 'unconfirmed email cannot read ticket status'
+    Check (([Net.WebUtility]::HtmlDecode((Page '/Chat/Verify?token=forged' $guest).Content)) -match 'Liên kết không hợp lệ') 'forged confirmation link rejected'
+    $confirmed = ConfirmChat 'one@test.local' $guest
+    Check (([Net.WebUtility]::HtmlDecode($confirmed.Content)) -match 'Đã xác nhận email') 'confirmation link from the email verifies the chat'
+    $owned = Say $chat $guest $guestCsrf "Trạng thái yêu cầu $ticketNumber"
+    Check ((@($owned.messages | Where-Object sender -eq 'bot')[0].body) -match 'Đã đóng') 'owner email sees the ticket status'
+    $stranger = & $newSession
+    $strangerCsrf = Token (Page '/' $stranger)
+    $strangerChat = NewChat $stranger $strangerCsrf
+    $null = ChatApi 'PUT' "/api/chat/sessions/$($strangerChat.id)/contact" $stranger $strangerCsrf $strangerChat.token @{email='two@test.local'}
+    $null = ConfirmChat 'two@test.local' $stranger
+    $foreign = Say $strangerChat $stranger $strangerCsrf "Trạng thái yêu cầu $ticketNumber"
+    $foreignReply = @($foreign.messages | Where-Object sender -eq 'bot')[0].body
+    Check ($foreignReply -match 'Không tìm thấy' -and $foreignReply -notmatch 'HTTP test ticket') 'another email cannot read the ticket'
+    Check ((StatusOf { ChatApi 'GET' "/api/chat/sessions/$($chat.id)" $stranger $strangerCsrf $strangerChat.token }) -eq 404) 'chat session cannot be opened with another session token'
+    $handed = Say $strangerChat $stranger $strangerCsrf 'Cho tôi gặp nhân viên'
+    Check ($handed.state.mode -eq 'human' -and $handed.state.ticketNumber -match '^CS-') 'chatbot hands the conversation to staff with a ticket'
+    $silent = Say $strangerChat $stranger $strangerCsrf 'Tôi vẫn đang chờ'
+    Check (@($silent.messages | Where-Object sender -eq 'bot').Count -eq 0) 'bot does not reply while staff handle the chat'
+    Check ((StatusOf { Invoke-WebRequest -Uri ($base + '/api/chat/admin/sessions') -UseBasicParsing }) -eq 401) 'chat admin API rejects anonymous callers'
+    Check ((StatusOf { Invoke-WebRequest -Uri ($base + '/api/chat/admin/sessions') -WebSession $one -UseBasicParsing }) -eq 403) 'chat admin API rejects customers'
+    Check ((Page '/ChatAdmin' $one).BaseResponse.ResponseUri.AbsolutePath -eq '/Account/AccessDenied') 'customer cannot open the chat console'
+    $consolePage = Page '/ChatAdmin?status=waiting_staff' $staffSession
+    $sessionId = [regex]::Match($consolePage.Content, '/ChatAdmin/Details/(\d+)').Groups[1].Value
+    Check ($sessionId.Length -gt 0) 'staff sees the waiting conversation in the chat console'
+    $staffCsrf = Token $consolePage
+    $null = ChatApi 'POST' "/api/chat/admin/sessions/$sessionId/replies" $staffSession $staffCsrf $null @{body='Chào bạn, nhân viên đã tiếp nhận.'; internal=$false}
+    $null = ChatApi 'POST' "/api/chat/admin/sessions/$sessionId/replies" $staffSession $staffCsrf $null @{body='Ghi chú: khách VIP.'; internal=$true}
+    $seen = (ChatApi 'GET' "/api/chat/sessions/$($strangerChat.id)?after=0" $stranger $strangerCsrf $strangerChat.token).Content | ConvertFrom-Json
+    Check ((@($seen.messages | Where-Object sender -eq 'staff').body -join ' ') -match 'đã tiếp nhận' -and (($seen.messages.body -join ' ') -notmatch 'khách VIP')) 'customer sees public staff reply, never the internal note'
+    $detail = (Invoke-WebRequest -Uri ($base + "/api/chat/admin/sessions/$sessionId") -WebSession $staffSession -UseBasicParsing).Content | ConvertFrom-Json
+    Check (@($detail.messages | Where-Object isInternal).Count -eq 1 -and $detail.ticket.number -eq $handed.state.ticketNumber -and $null -eq $detail.logs) 'staff console shows notes and ticket; AI logs reserved for admins'
+    $adminDetail = (Invoke-WebRequest -Uri ($base + "/api/chat/admin/sessions/$sessionId") -WebSession $admin -UseBasicParsing).Content | ConvertFrom-Json
+    Check (@($adminDetail.logs).Count -ge 1 -and (@($adminDetail.logs).toolCalls -join ' ') -match 'handoff_to_human:ok') 'admin sees AI tool-call log'
+    $chatTicketPage = Page "/Tickets/Details/$($detail.ticket.id)" $staffSession
+    $chatTicketHtml = [Net.WebUtility]::HtmlDecode($chatTicketPage.Content)
+    Check ($chatTicketHtml -match 'Tiếp nhận qua chatbot' -and $chatTicketHtml -match 'Đạt SLA phản hồi đầu') 'chat ticket visible in the normal ticket screen with its SLA state'
+    $reprioritised = [Net.WebUtility]::HtmlDecode((PostForm '/Tickets/UpdatePriority' $staffSession @{id=$detail.ticket.id;priority='Cao'} $chatTicketPage).Content)
+    Check ($reprioritised -match 'Ưu tiên: Cao' -and $reprioritised -match 'Đã cập nhật mức ưu tiên') 'staff changes ticket priority (SLA recomputed)'
+    Check ((PostForm '/Tickets/UpdatePriority' $one @{id=$detail.ticket.id;priority='Thấp'} (Page '/Tickets' $one)).BaseResponse.ResponseUri.AbsolutePath -eq '/Account/AccessDenied') 'customer cannot change ticket priority'
+    # Ticket assignment.
+    $staffPick = [regex]::Match($reprioritised, '<option value="(\d+)"[^>]*>Test Staff').Groups[1].Value
+    Check ($staffPick.Length -gt 0) 'assignee list offers active staff'
+    $assigned = [Net.WebUtility]::HtmlDecode((PostForm '/Tickets/UpdateAssignee' $staffSession @{id=$detail.ticket.id;assigneeId=$staffPick} (Page "/Tickets/Details/$($detail.ticket.id)" $staffSession)).Content)
+    Check ($assigned -match 'Phụ trách: Test Staff' -and $assigned -match 'Đã giao yêu cầu') 'staff assigns a ticket'
+    Check (([Net.WebUtility]::HtmlDecode((Page '/Tickets?assignee=me' $staffSession).Content)) -match [regex]::Escape($handed.state.ticketNumber)) 'assigned ticket appears under "Giao cho tôi"'
+    Check ((PostForm '/Tickets/UpdateAssignee' $one @{id=$detail.ticket.id;assigneeId=''} (Page '/Tickets' $one)).BaseResponse.ResponseUri.AbsolutePath -eq '/Account/AccessDenied') 'customer cannot assign tickets'
+    $customerAsAssignee = [regex]::Match((Page "/Customers?search=one@test.local" $staffSession).Content, '/Customers/Details/(\d+)').Groups[1].Value
+    $badAssign = [Net.WebUtility]::HtmlDecode((PostForm '/Tickets/UpdateAssignee' $staffSession @{id=$detail.ticket.id;assigneeId=$customerAsAssignee} (Page "/Tickets/Details/$($detail.ticket.id)" $staffSession)).Content)
+    Check ($badAssign -match 'phải là nhân viên' -and $badAssign -match 'Phụ trách: Test Staff') 'a customer cannot be made the assignee'
+    Check (([Net.WebUtility]::HtmlDecode((Page '/Admin/AuditLog?kind=ticket.assign' $admin).Content)) -match 'Test Staff') 'assignment recorded in the audit log'
+    # Staff CRM assistant without an AI key answers honestly instead of inventing figures.
+    $staffAssistant = Page '/Assistant' $staffSession
+    Check (([Net.WebUtility]::HtmlDecode($staffAssistant.Content)) -match 'Trợ lý CRM') 'staff assistant page shows the CRM mode'
+    $crmAnswer = (JsonPost '/Assistant/Ask' $staffSession @{message='Tổng quan yêu cầu 30 ngày qua'} (Token $staffAssistant)).Content | ConvertFrom-Json
+    Check ($crmAnswer.mode -eq 'crm-error' -and $crmAnswer.reply -match 'Groq hoặc Gemini') 'CRM assistant without AI key reports the setup step, no fabricated statistics'
+    $portalTicket = PostForm '/Tickets/Create' $two @{Subject='SLA portal ticket';Category='Other';FirstMessage='Need help with the SLA check please.'} (Page '/Tickets/Create' $two)
+    $portalId = [regex]::Match($portalTicket.Content, 'name="TicketId" value="(\d+)"').Groups[1].Value
+    Check (([Net.WebUtility]::HtmlDecode((Page "/Tickets/Details/$portalId" $staffSession).Content)) -match 'Ưu tiên: Trung bình' ) 'portal tickets get the default priority and an SLA deadline'
+    $flood = NewChat $guest $guestCsrf
+    $messageLimited = $false
+    for ($i=0; $i -lt 14; $i++) { if ((StatusOf { Say $flood $guest $guestCsrf "Câu hỏi số $i" }) -eq 429) { $messageLimited=$true; break } }
+    Check $messageLimited 'chat message rate limit (10 per minute per session) enforced'
     if ($CaptureBrowser) {
         $cookieFile = Join-Path $run 'browser-cookies.json'
         $cookieData = @($one.Cookies.GetCookies([Uri]$base) | ForEach-Object { @{Name=$_.Name;Value=$_.Value} })
@@ -197,6 +302,11 @@ try {
         & dotnet run --project (Join-Path $PSScriptRoot 'BrowserChecks\BrowserChecks.csproj') --no-build -- $base $cookieFile $artifacts $staffCookieFile $openTicket
         if ($LASTEXITCODE -ne 0) { throw 'Browser checks failed' }
     }
+    # Last, because it blocks new chat sessions from this IP for a minute (the browser pass needs one).
+    $sessionLimited = $false
+    for ($i=0; $i -lt 25; $i++) { if ((StatusOf { ChatApi 'POST' '/api/chat/sessions' $guest $guestCsrf }) -eq 429) { $sessionLimited=$true; break } }
+    Check $sessionLimited 'chat session creation limit (20 per minute per IP) enforced'
+    Write-Output 'All HTTP checks passed. Production database was not modified.'
 } finally {
     if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -Force }
     foreach ($name in $environmentNames) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }

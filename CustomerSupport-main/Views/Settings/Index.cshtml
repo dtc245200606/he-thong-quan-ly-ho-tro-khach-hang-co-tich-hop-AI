@@ -1,4 +1,5 @@
 @model CustomerSupportAI.Services.AiSettingsForm
+@using CustomerSupportAI.Services
 @{ ViewData["Title"] = "Cấu hình AI"; }
 <header class="page-header">
     <div>
@@ -13,6 +14,10 @@
         <div class="card-header"><div><h2 id="gemini-title">Kết nối Gemini</h2><p class="card-subtitle">Key được mã hóa trên máy chủ và không hiển thị lại.</p></div></div>
         <form class="card-body form-stack" method="post">
             <div asp-validation-summary="All" class="validation-summary"></div>
+            @if (ViewData["GeminiKeyUnreadable"] is true)
+            {
+                <div class="alert alert-warning"><icon name="triangle-alert" /><span>API key Gemini đã lưu không giải mã được (key được lưu ở máy hoặc thư mục khác). Hãy nhập lại key và lưu.</span></div>
+            }
             <div class="field">
                 <label class="field-label is-required" asp-for="Model">Model</label>
                 <input asp-for="Model" placeholder="Ví dụ: gemini-3.8-flash" />
@@ -45,5 +50,60 @@
         <p class="text-secondary">AI nhận câu hỏi, tối đa 6 lượt hội thoại gần đây, hướng dẫn liên quan và tóm tắt yêu cầu của chính khách hàng.</p>
         <div class="alert alert-info section-gap"><icon name="info" /><span>Khi thiếu key hoặc nhà cung cấp gặp lỗi, hệ thống tự chuyển sang tra cứu kho hướng dẫn và hiển thị rõ chế độ này.</span></div>
         <a class="card-link section-gap" asp-controller="Knowledge" asp-action="Index">Quản lý kho hướng dẫn <icon name="arrow-right" class="icon-sm" /></a>
+    </section>
+</div>
+
+@{ var chatbot = (ChatbotSettingsForm)ViewData["Chatbot"]!; }
+<div class="grid-main-aside section-gap">
+    <section class="card" aria-labelledby="chatbot-title">
+        <div class="card-header">
+            <div><h2 id="chatbot-title">Chatbot hỗ trợ trên website</h2><p class="card-subtitle">Chọn nhà cung cấp AI chạy bằng API key cho cửa sổ chat của khách hàng.</p></div>
+            <span class="mode-pill @(chatbot.HasGroqKey ? "is-ai" : "")"><span class="dot"></span>@(chatbot.HasGroqKey ? "Đã có API key Groq" : "Chưa có API key Groq")</span>
+        </div>
+        <form class="card-body form-stack" method="post" asp-action="Chatbot">
+            @if (ViewData["GroqKeyUnreadable"] is true)
+            {
+                <div class="alert alert-warning"><icon name="triangle-alert" /><span>API key Groq đã lưu không giải mã được (key được lưu ở máy hoặc thư mục khác). Hãy nhập lại key và lưu.</span></div>
+            }
+            <div class="field">
+                <label class="field-label is-required" for="chatbot-provider">Nhà cung cấp</label>
+                <select id="chatbot-provider" name="Provider">
+                    <option value="auto" selected="@(chatbot.Provider == "auto" ? "selected" : null)">Tự động: Groq nếu có key, sau đó Gemini, cuối cùng Mock</option>
+                    <option value="groq" selected="@(chatbot.Provider == "groq" ? "selected" : null)">Groq (API key Groq)</option>
+                    <option value="gemini" selected="@(chatbot.Provider == "gemini" ? "selected" : null)">Gemini (dùng API key Gemini ở trên)</option>
+                    <option value="mock" selected="@(chatbot.Provider == "mock" ? "selected" : null)">Mock: không gọi AI, dùng cho phát triển/kiểm thử</option>
+                </select>
+            </div>
+            <div class="field">
+                <label class="field-label is-required" for="chatbot-model">Model Groq</label>
+                <input id="chatbot-model" name="GroqModel" value="@chatbot.GroqModel" />
+                <span class="field-hint">Mặc định @ChatbotSettingsStore.DefaultGroqModel. Model khác hỗ trợ gọi công cụ: llama-3.3-70b-versatile, openai/gpt-oss-20b.</span>
+            </div>
+            <div class="field">
+                <label class="field-label" for="chatbot-key">API key Groq mới</label>
+                <input id="chatbot-key" name="GroqApiKey" type="password" autocomplete="new-password" placeholder="Để trống để giữ key hiện tại" />
+                <span class="field-hint">Lấy key tại console.groq.com/keys. Cũng có thể đặt biến môi trường GROQ_API_KEY.</span>
+            </div>
+            <label class="check"><input type="checkbox" name="FallbackToMock" value="true" checked="@(chatbot.FallbackToMock ? "checked" : null)" /> <span>Khi AI thật lỗi, dùng chế độ dự phòng Mock (câu trả lời được gắn nhãn "không phải AI")</span></label>
+            <input type="hidden" name="FallbackToMock" value="false" />
+            <label class="check"><input type="checkbox" name="RemoveGroqKey" value="true" /> <span>Xóa API key Groq đã lưu</span></label>
+            <div class="form-actions">
+                <span>Lưu trước, sau đó kiểm tra kết nối thực tế.</span>
+                <div><button class="btn btn-primary" type="submit"><icon name="check" />Lưu cấu hình chatbot</button></div>
+            </div>
+        </form>
+        <form asp-action="TestChatbot" method="post" class="card-footer">
+            <span class="cell-sub">Gửi một yêu cầu thử tới nhà cung cấp chatbot đang chọn.</span>
+            <button class="btn btn-secondary" type="submit"><icon name="refresh-cw" />Kiểm tra kết nối chatbot</button>
+        </form>
+    </section>
+    <section class="card card-body">
+        <span class="eyebrow">Chatbot</span>
+        <h2>AI chỉ thao tác qua công cụ</h2>
+        <ol class="steps-list">
+            <li>Tra cứu FAQ, xem trạng thái yêu cầu (đã xác minh email), tạo yêu cầu và chuyển nhân viên.</li>
+            <li>Email, số điện thoại, số thẻ, mật khẩu và OTP được ẩn trước khi gửi tới AI.</li>
+            <li>Theo dõi và trả lời khách tại <a asp-controller="ChatAdmin" asp-action="Index">Hội thoại chatbot</a>.</li>
+        </ol>
     </section>
 </div>

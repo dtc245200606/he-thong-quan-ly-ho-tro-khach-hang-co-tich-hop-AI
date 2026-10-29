@@ -88,6 +88,8 @@ try {
     Check((await ticketAi.SummarizeAsync(ticket,default)) is { Value:null, Error:not null } && handler.RequestCount==countBefore,"ticket AI without key reports setup step and makes no request");
     config["Gemini:ApiKey"]="environment-key";
     Check(!service.IsConfigured,"explicit disconnect blocks environment key");
+    File.WriteAllText(Path.Combine(folder,"gemini-settings.json"),"""{"Model":"m","ProtectedKey":"CfDJ8-from-another-machine","DisableEnvironmentKey":false}""");
+    Check(!service.IsConfigured && settings.SavedKeyUnreadable,"key encrypted elsewhere is reported as unreadable instead of crashing");
     Console.WriteLine("All service checks passed.");
 } finally { Directory.Delete(folder,true); }
 static void Check(bool condition,string name) { if(!condition) throw new Exception("FAILED: "+name); Console.WriteLine("PASS: "+name); }

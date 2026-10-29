@@ -28,6 +28,7 @@ public sealed class DashboardViewModel
 }
 public sealed record TrendPoint(DateTime Start, int Count);
 public sealed record KnowledgeViewModel(IReadOnlyList<KnowledgeArticle> Articles, string Search, string Category);
-public sealed record AssistantPageViewModel(IReadOnlyList<AssistantTurn> History, bool IsConfigured);
+/// <param name="IsStaff">Staff and admins get the read-only CRM assistant; customers the support assistant.</param>
+public sealed record AssistantPageViewModel(IReadOnlyList<AssistantTurn> History, bool IsConfigured, bool IsStaff = false, string? ProviderName = null);
 public sealed record ActivityViewModel(IReadOnlyList<TicketMessage> Messages);
 public sealed record AuditLogViewModel(IReadOnlyList<AuditLog> Entries, PageInfo Paging, string Action);

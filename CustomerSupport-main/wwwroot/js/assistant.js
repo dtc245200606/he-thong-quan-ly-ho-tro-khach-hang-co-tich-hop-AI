@@ -89,14 +89,14 @@ form.addEventListener('submit', async e => {
     if (response.redirected || response.status === 401) throw new Error('Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.');
     if (response.status === 429) throw new Error('Bạn gửi câu hỏi quá nhanh. Vui lòng thử lại sau một phút.');
     const data = await response.json(); if (!response.ok) throw new Error(data.reply || 'Không gửi được câu hỏi.');
-    const label = document.createElement('span'); label.className = 'reply-mode'; label.textContent = data.mode === 'ai' ? 'AI · Gemini' : 'Tra cứu kho hướng dẫn';
+    const label = document.createElement('span'); label.className = 'reply-mode'; label.textContent = data.label || (data.mode === 'ai' ? 'AI · Gemini' : 'Tra cứu kho hướng dẫn');
     const text = document.createElement('div'); text.className = 'reply-text'; renderMarkdown(text, data.reply || '');
     pending.bubble.classList.add('md'); pending.bubble.replaceChildren(label, text);
     pending.column.append(copyButton(() => data.reply || ''));
-    document.querySelector('#assistant-mode').textContent = data.notice || (data.mode === 'ai' ? 'Đang trả lời bằng AI · Gemini' : 'Đang tra cứu kho hướng dẫn');
+    document.querySelector('#assistant-mode').textContent = data.notice || data.label || (data.mode === 'ai' ? 'Đang trả lời bằng AI · Gemini' : 'Đang tra cứu kho hướng dẫn');
     const sources = document.querySelector('#assistant-sources'); sources.replaceChildren();
     for (const source of data.sources || []) { const link = document.createElement('a'); link.className = 'source-link'; link.href = source.url; link.append(icon('file-text'), document.createTextNode(source.title)); sources.append(link); }
-    if (!sources.childElementCount) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = data.mode === 'ai' ? 'Câu trả lời từ Gemini, không sử dụng bài hướng dẫn.' : 'Hiện chưa có hướng dẫn liên quan để trả lời thay thế.'; sources.append(p); }
+    if (!sources.childElementCount) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = data.mode === 'crm' ? 'Câu trả lời không cần tra cứu dữ liệu CRM.' : data.mode === 'crm-error' ? 'Chưa tra cứu được dữ liệu CRM.' : data.mode === 'ai' ? 'Câu trả lời từ Gemini, không sử dụng bài hướng dẫn.' : 'Hiện chưa có hướng dẫn liên quan để trả lời thay thế.'; sources.append(p); }
   } catch (error) {
     pending.bubble.classList.add('is-error');
     pending.bubble.textContent = error.name === 'AbortError' ? 'Phản hồi quá lâu. Hãy thử lại sau hoặc chuyển nhân viên.' : error.message || 'Không thể kết nối. Vui lòng thử lại.';

@@ -1,0 +1,17 @@
+@model bool
+@{ ViewData["Title"] = Model ? "Đã xác nhận email" : "Liên kết không hợp lệ"; }
+<section class="card auth-single" aria-labelledby="verify-title">
+    <span class="auth-single-icon @(Model ? "" : "tone-danger")"><icon name="@(Model ? "circle-check" : "circle-alert")" /></span>
+    <h1 id="verify-title">@ViewData["Title"]</h1>
+    @if (Model)
+    {
+        <p>Email của bạn đã được xác nhận cho cuộc trò chuyện hỗ trợ. Hãy quay lại cửa sổ chat (nút <strong>Hỗ trợ trực tuyến</strong>) để tiếp tục.</p>
+    }
+    else
+    {
+        <p>Liên kết đã hết hạn (24 giờ), bị thay đổi, hoặc email của cuộc trò chuyện đã được đổi. Hãy nhập lại email trong cửa sổ chat để nhận liên kết mới.</p>
+    }
+    <div class="auth-single-actions">
+        <a class="btn btn-primary" asp-controller="Home" asp-action="Index">Về trang chủ</a>
+    </div>
+</section>

@@ -19,14 +19,22 @@ public sealed class TicketIndexViewModel
     public IReadOnlyDictionary<int, int> MessageCounts { get; init; } = new Dictionary<int, int>();
     /// <summary>Ticket ids on this page whose newest message came from the customer.</summary>
     public IReadOnlySet<int> AwaitingTeam { get; init; } = new HashSet<int>();
+    /// <summary>Tickets on this page past their first-response SLA without a staff reply.</summary>
+    public IReadOnlySet<int> SlaOverdue { get; init; } = new HashSet<int>();
     public int TotalCount { get; init; }
     public int OpenCount { get; init; }
     public int ResolvedCount { get; init; }
     /// <summary>Open or in-progress tickets waiting for a team reply (staff only).</summary>
     public int AwaitingCount { get; init; }
     public bool IsStaff { get; init; }
-    public bool IsFiltered => Search.Length > 0 || Status.Length > 0 || Category.Length > 0 || Customer is not null || From is not null || To is not null;
+    /// <summary>Assignee filter (staff only): "", "me", "none" or a staff user id.</summary>
+    public string Assignee { get; init; } = string.Empty;
+    public IReadOnlyList<StaffOption> StaffOptions { get; init; } = [];
+    public bool IsFiltered => Search.Length > 0 || Status.Length > 0 || Category.Length > 0 || Customer is not null || From is not null || To is not null || Assignee.Length > 0;
 }
+
+/// <summary>An active staff member or admin who can be assigned tickets, with their current open workload.</summary>
+public sealed record StaffOption(int Id, string Name, string Role, int OpenTickets);
 
 public sealed class TicketCreateViewModel
 {
@@ -57,6 +65,7 @@ public sealed class TicketDetailsViewModel
     /// <summary>Whether a Gemini key is configured; the AI panel explains the setup step when it is not.</summary>
     public bool AiConfigured { get; init; }
     public int CustomerTicketCount { get; init; }
+    public IReadOnlyList<StaffOption> StaffOptions { get; init; } = [];
 }
 
 public sealed class UserListItemViewModel

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CustomerSupportAI.Models;
+using CustomerSupportAI.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -119,7 +120,10 @@ public static class DemoData
     {
         if (await db.Users.AnyAsync(user => user.NormalizedEmail.EndsWith(NormalizedSuffix)))
         {
-            return $"Dữ liệu mẫu đã tồn tại (tài khoản @{Domain}). Chạy --remove-demo trước nếu muốn tạo lại.";
+            var filled = await BackfillAsync(db);
+            return $"Dữ liệu mẫu đã tồn tại (tài khoản @{Domain}). " +
+                (filled > 0 ? $"Đã bổ sung mức ưu tiên/SLA/người phụ trách cho {filled} yêu cầu mẫu còn trống. " : "") +
+                "Chạy --remove-demo trước nếu muốn tạo lại.";
         }
 
         var password = "Demo-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant() + "!";
@@ -169,10 +173,14 @@ public static class DemoData
                     ? roll < 0.4 ? (4, "Resolved") : roll < 0.8 ? (2, "In progress") : (3, "In progress")
                     : roll < 0.35 ? (1, "Open") : roll < 0.65 ? (3, "In progress") : (2, "In progress");
 
+            var priority = DemoPriority(scenario.Subject, scenario.Category);
             var ticket = new SupportTicket
             {
                 TicketNumber = $"CS-{start.ToOffset(TimeSpan.FromHours(7)):yyyyMMdd}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(4))}",
-                Subject = Fill(scenario.Subject), Category = scenario.Category, CustomerId = customer.Id, CreatedAt = start
+                Subject = Fill(scenario.Subject), Category = scenario.Category, CustomerId = customer.Id, CreatedAt = start,
+                Priority = priority, SlaDueAt = SlaPolicy.DueAt(start, priority, Sla),
+                // Whoever answers owns the ticket; about half of the still-unanswered ones are already assigned.
+                AssigneeId = steps > 1 || random.NextDouble() < 0.5 ? agent.Id : null
             };
             var texts = new[] { scenario.Ask, scenario.Reply, scenario.FollowUp, scenario.Close };
             var at = start;
@@ -217,12 +225,50 @@ public static class DemoData
         return $"Đã tạo {staff.Count} nhân viên, {customers.Count} khách hàng, {tickets.Count} yêu cầu, {tickets.Sum(t => t.Messages.Count)} tin nhắn. Thông tin đăng nhập: {file}";
     }
 
+    private static readonly SlaOptions Sla = new();
+
+    /// <summary>Plausible priority for a demo scenario: money and lock-outs are high, feedback is low.</summary>
+    private static string DemoPriority(string subject, string category) =>
+        subject.Contains("trừ tiền") || subject.Contains("bị khóa") || subject.Contains("Không đăng nhập") ? "Cao"
+        : category == "Other" ? "Thấp" : "Trung bình";
+
+    /// <summary>
+    /// Fills priority, SLA deadline and assignee on demo tickets created before those columns existed. Only demo
+    /// tickets (demo customers) and only empty fields are touched; real data is never modified.
+    /// </summary>
+    private static async Task<int> BackfillAsync(AppDbContext db)
+    {
+        var demoTickets = await db.Tickets.Include(ticket => ticket.Messages).ThenInclude(message => message.Author)
+            .Where(ticket => ticket.Customer.NormalizedEmail.EndsWith(NormalizedSuffix) && (ticket.Priority == null || ticket.AssigneeId == null))
+            .ToListAsync();
+        var changed = 0;
+        foreach (var ticket in demoTickets)
+        {
+            var before = (ticket.Priority, ticket.AssigneeId);
+            if (ticket.Priority is null)
+            {
+                ticket.Priority = DemoPriority(ticket.Subject, ticket.Category);
+                ticket.SlaDueAt = SlaPolicy.DueAt(ticket.CreatedAt, ticket.Priority, Sla);
+            }
+            ticket.AssigneeId ??= ticket.Messages.OrderBy(message => message.Id)
+                .FirstOrDefault(message => message.Author.Role is UserRoles.Staff or UserRoles.Admin)?.AuthorId;
+            if ((ticket.Priority, ticket.AssigneeId) != before) changed++;
+        }
+        await db.SaveChangesAsync();
+        return changed;
+    }
+
     public static async Task<string> RemoveAsync(AppDbContext db, string appDataDirectory)
     {
         var ids = await db.Users.Where(user => user.NormalizedEmail.EndsWith(NormalizedSuffix)).Select(user => user.Id).ToListAsync();
         if (ids.Count == 0) return "Không có dữ liệu mẫu để xóa.";
 
         var ticketIds = await db.Tickets.Where(t => ids.Contains(t.CustomerId)).Select(t => t.Id).ToListAsync();
+        // Chat sessions of demo customers or demo tickets (no FK, so removed explicitly).
+        var chats = await db.ChatSessions.Where(s => (s.UserId != null && ids.Contains(s.UserId.Value)) ||
+            (s.TicketId != null && ticketIds.Contains(s.TicketId.Value))).Select(s => s.Id).ToListAsync();
+        await db.ChatMessages.Where(m => chats.Contains(m.SessionId)).ExecuteDeleteAsync();
+        await db.ChatSessions.Where(s => chats.Contains(s.Id)).ExecuteDeleteAsync();
         var messages = await db.TicketMessages.Where(m => ticketIds.Contains(m.TicketId)).ExecuteDeleteAsync();
         var tickets = await db.Tickets.Where(t => ticketIds.Contains(t.Id)).ExecuteDeleteAsync();
         await db.AssistantTurns.Where(t => ids.Contains(t.UserId)).ExecuteDeleteAsync();

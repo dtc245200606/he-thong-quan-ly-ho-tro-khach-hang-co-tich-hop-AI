@@ -41,6 +41,22 @@ public static class DisplayText
         _ => "badge badge-plain badge-neutral"
     };
 
+    public static string ChatStatus(string status, string mode) => status switch
+    {
+        ChatStatuses.WaitingStaff => "Chờ nhân viên",
+        ChatStatuses.StaffReplied => "Nhân viên đã trả lời",
+        ChatStatuses.Closed => "Đã kết thúc",
+        _ => mode == ChatModes.Human ? "Nhân viên xử lý" : "AI đang hỗ trợ"
+    };
+
+    public static string ChatStatusBadge(string status) => status switch
+    {
+        ChatStatuses.WaitingStaff => "badge badge-danger",
+        ChatStatuses.StaffReplied => "badge badge-warning",
+        ChatStatuses.Closed => "badge badge-neutral",
+        _ => "badge badge-info"
+    };
+
     public static string TicketCategory(string category) => category switch
     {
         "Product support" => "Hỗ trợ sản phẩm",

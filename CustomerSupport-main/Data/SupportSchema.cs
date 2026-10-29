@@ -40,6 +40,49 @@ public static class SupportSchema
         }
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_PhoneNumber ON Users(PhoneNumber) WHERE PhoneNumber IS NOT NULL;");
+        // Additive columns for chatbot tickets: priority (nullable for old rows) and intake channel.
+        if (!await HasColumnAsync(db, "Tickets", "Priority"))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN Priority TEXT NULL;");
+        if (!await HasColumnAsync(db, "Tickets", "Channel"))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN Channel TEXT NOT NULL DEFAULT 'web';");
+        if (!await HasColumnAsync(db, "Tickets", "SlaDueAt"))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN SlaDueAt TEXT NULL;");
+        // Ticket assignment: deleting the assignee's account leaves the ticket unassigned, never deletes it.
+        if (!await HasColumnAsync(db, "Tickets", "AssigneeId"))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE Tickets ADD COLUMN AssigneeId INTEGER NULL REFERENCES Users(Id) ON DELETE SET NULL;");
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS IX_Tickets_AssigneeId ON Tickets(AssigneeId);
+            CREATE INDEX IF NOT EXISTS IX_Tickets_Status ON Tickets(Status);
+            """);
+        // Chatbot tables. Sessions have no FK to Users/Tickets so account deletion stays explicit.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS ChatSessions (
+              Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, PublicId TEXT NOT NULL, TokenHash TEXT NOT NULL,
+              UserId INTEGER NULL, ContactEmail TEXT NULL, EmailVerified INTEGER NOT NULL DEFAULT 0,
+              VerificationSends INTEGER NOT NULL DEFAULT 0, Mode TEXT NOT NULL, Status TEXT NOT NULL,
+              TicketId INTEGER NULL, HandoffReason TEXT NULL, Urgent INTEGER NOT NULL,
+              LastTicketMessageId INTEGER NOT NULL, CreatedAt TEXT NOT NULL, UpdatedAt TEXT NOT NULL);
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_ChatSessions_PublicId ON ChatSessions(PublicId);
+            CREATE INDEX IF NOT EXISTS IX_ChatSessions_TicketId ON ChatSessions(TicketId);
+            CREATE TABLE IF NOT EXISTS ChatMessages (
+              Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, SessionId INTEGER NOT NULL, Sender TEXT NOT NULL,
+              Body TEXT NOT NULL, IsInternal INTEGER NOT NULL, AuthorId INTEGER NULL, AuthorName TEXT NULL,
+              TicketMessageId INTEGER NULL, CreatedAt TEXT NOT NULL,
+              FOREIGN KEY(SessionId) REFERENCES ChatSessions(Id) ON DELETE CASCADE);
+            CREATE INDEX IF NOT EXISTS IX_ChatMessages_SessionId_Id ON ChatMessages(SessionId, Id);
+            CREATE TABLE IF NOT EXISTS AiLogs (
+              Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, SessionId INTEGER NULL, Task TEXT NOT NULL,
+              Provider TEXT NOT NULL, FallbackUsed INTEGER NOT NULL, Success INTEGER NOT NULL,
+              DurationMs INTEGER NOT NULL, RedactedCount INTEGER NOT NULL, ToolRounds INTEGER NOT NULL,
+              ToolCalls TEXT NOT NULL, Error TEXT NOT NULL, CreatedAt TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS IX_AiLogs_SessionId ON AiLogs(SessionId);
+            """);
+        // Email confirmation columns for chat tables created before they existed.
+        if (!await HasColumnAsync(db, "ChatSessions", "EmailVerified"))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE ChatSessions ADD COLUMN EmailVerified INTEGER NOT NULL DEFAULT 0;");
+        if (!await HasColumnAsync(db, "ChatSessions", "VerificationSends"))
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE ChatSessions ADD COLUMN VerificationSends INTEGER NOT NULL DEFAULT 0;");
+        await IntegrityRules.ApplyAsync(db);
         if (await db.KnowledgeArticles.AnyAsync()) return;
         db.KnowledgeArticles.AddRange(
             Article("Cách tạo yêu cầu hỗ trợ", "Bắt đầu", "Vào Yêu cầu hỗ trợ → Tạo yêu cầu. Nhập tiêu đề, chọn danh mục và mô tả vấn đề (ít nhất 10 ký tự). Cung cấp mã đơn hàng hoặc mã sản phẩm nếu có, các bước đã thử và lỗi gặp phải. Sau khi gửi, hệ thống cấp mã CS để bạn theo dõi. Không gửi mật khẩu, mã OTP hoặc số thẻ."),
@@ -51,5 +94,9 @@ public static class SupportSchema
             Article("Trợ lý thông minh và chuyển nhân viên", "Trợ lý", "Trợ lý tra cứu kho hướng dẫn và các yêu cầu của chính bạn. Khi được cấu hình nhà cung cấp AI, trợ lý có thể trả lời dựa trên ngữ cảnh cuộc hội thoại. Nếu chưa giải quyết được, chọn Chuyển nhân viên ở trang Trợ lý để tạo một yêu cầu từ cuộc trao đổi gần đây. AI không tự thay đổi trạng thái hoặc thực hiện thanh toán."));
         await db.SaveChangesAsync();
     }
+    private static async Task<bool> HasColumnAsync(AppDbContext db, string table, string column) =>
+        await db.Database
+            .SqlQuery<int>($"SELECT COUNT(*) AS Value FROM pragma_table_info({table}) WHERE name = {column}")
+            .SingleAsync() > 0;
     private static KnowledgeArticle Article(string title, string category, string body) => new() { Title = title, Category = category, Body = body };
 }

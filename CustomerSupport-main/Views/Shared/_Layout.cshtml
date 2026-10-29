@@ -19,6 +19,7 @@
         "Knowledge" => ("Kho hướng dẫn", "Knowledge", "Index"),
         "Account" => ("Tài khoản", "Account", "Profile"),
         "Customers" => ("Khách hàng", "Customers", "Index"),
+        "ChatAdmin" => ("Hội thoại chatbot", "ChatAdmin", "Index"),
         "Admin" or "Settings" => ("Quản trị", "Admin", "Users"),
         _ => null
     };
@@ -31,7 +32,7 @@
         ("Tổng quan", [("Dashboard", "Index", "layout-dashboard", "Dashboard", Active("Dashboard", "Index"), null)]),
         ("Hỗ trợ khách hàng", [
             ("Tickets", "Index", "inbox", isAdmin || isStaff ? "Hộp thư hỗ trợ" : "Yêu cầu của tôi", Active("Tickets"), null),
-            .. (isAdmin || isStaff ? new[] { ("Customers", "Index", "users", "Khách hàng", Active("Customers"), (object?)null) } : []),
+            .. (isAdmin || isStaff ? new[] { ("ChatAdmin", "Index", "message-square", "Hội thoại chatbot", Active("ChatAdmin"), (object?)null), ("Customers", "Index", "users", "Khách hàng", Active("Customers"), (object?)null) } : []),
             ("Dashboard", "Activity", "activity", "Lịch sử trao đổi", Active("Dashboard", "Activity"), null)]),
         ("Trí tuệ nhân tạo", [
             ("Assistant", "Index", "sparkles", "Trợ lý AI", Active("Assistant"), null),
@@ -197,6 +198,11 @@ else
         </div>
     }
 </div>
+@if (!signedIn || User.IsInRole(UserRoles.Customer))
+{
+    <partial name="_ChatWidget" />
+    <script src="~/js/chat-widget.js" asp-append-version="true" defer></script>
+}
 <dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
     <form method="dialog">
         <div class="modal-body">

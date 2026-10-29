@@ -91,6 +91,20 @@
       box.querySelector('[data-field-value="category"]').value = result.category;
       box.querySelector('[data-ai-apply]').hidden = result.same;
       box.querySelector('[data-ai-same]').hidden = !result.same;
+      box.querySelector('[data-field="sentiment"]').textContent = result.sentiment || 'Không rõ';
+      box.querySelector('[data-field="intent"]').textContent = result.intent || '—';
+      box.querySelector('[data-field-value="priority"]').value = result.priority;
+      box.querySelector('[data-ai-apply-priority]').hidden = !!result.samePriority;
+      const assigneeText = box.querySelector('[data-field="assigneeText"]');
+      const assigneeForm = box.querySelector('[data-ai-apply-assignee]');
+      if (result.assignee) {
+        assigneeText.textContent = result.assignee.same
+          ? `Đang giao cho ${result.assignee.name}, người có ít yêu cầu mở nhất (${result.assignee.open}).`
+          : `Gợi ý người phụ trách: ${result.assignee.name} (đang có ${result.assignee.open} yêu cầu mở, ít nhất nhóm).`;
+        assigneeText.hidden = false;
+        box.querySelector('[data-field-value="assigneeId"]').value = result.assignee.id;
+        assigneeForm.hidden = result.assignee.same;
+      } else { assigneeText.hidden = true; assigneeForm.hidden = true; }
       box.hidden = false;
     },
     summary(panel, { result, truncated, generatedAt }) {

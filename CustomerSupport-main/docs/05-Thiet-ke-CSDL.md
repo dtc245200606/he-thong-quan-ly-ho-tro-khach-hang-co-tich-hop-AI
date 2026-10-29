@@ -1,90 +1,85 @@
-# 05. Thiết kế CSDL hiện có
+# 05. Thiết kế CSDL
 
-Nguồn: `Models/*.cs`, `Data/AppDbContext.cs`, `SupportSchema.cs`, `DatabaseInitializer.cs`. SQLite mặc định `customer-support.db` trong content root; có thể thay bằng ConnectionStrings:DefaultConnection. Năm bảng dưới đây là bảng nghiệp vụ, không mô tả ErrorViewModel/ViewModels thành bảng. SQLite có thể có bảng kỹ thuật `sqlite_sequence` phục vụ AUTOINCREMENT.
+Nguồn: `Models/*.cs`, `Data/AppDbContext.cs`, `Data/SupportSchema.cs`, `Data/IntegrityRules.cs`, `Data/DatabaseInitializer.cs`. SQLite, mặc định `customer-support.db` trong content root (đổi bằng `ConnectionStrings__DefaultConnection`). SQLite lưu chuỗi và DateTimeOffset dạng TEXT, bool dạng INTEGER 0/1.
 
-## Từ điển dữ liệu
+## Bảng và trường
 
-Tất cả thuộc tính scalar dưới đây là NOT NULL theo EF/schema hiện tại. `Id` INTEGER PK sinh tự động; `UserId`, `CustomerId`, `TicketId`, `AuthorId` là INTEGER. Chuỗi là TEXT; DateTimeOffset được provider SQLite lưu TEXT. Các giá trị mặc định UTC/role/status/mode được khởi tạo trong C#, không mặc nhiên là DEFAULT trong SQL.
-
-| Bảng / Model | Cột (ngoài Id) | Ràng buộc và ý nghĩa |
+| Bảng | Cột chính | Ràng buộc |
 |---|---|---|
-| Users / SupportUser | DisplayName, Email, NormalizedEmail, PasswordHash, Role, CreatedAt | DisplayName ≤100; email ≤320 và EmailAddress ở model; NormalizedEmail Trim + UpperInvariant, UNIQUE; PasswordHash không lưu password rõ; Role ≤20, mặc định Customer |
-| Tickets / SupportTicket | TicketNumber, Subject, Category, Status, CustomerId, CreatedAt, UpdatedAt | TicketNumber ≤24 UNIQUE (code sinh 20); Subject ≤120; Category ≤60; Status ≤20 mặc định Open; CustomerId FK Users |
-| TicketMessages / TicketMessage | TicketId, AuthorId, Body, CreatedAt | TicketId FK Tickets; AuthorId FK Users; Body ≤4000 |
-| KnowledgeArticles / KnowledgeArticle | Title, Category, Body, UpdatedAt | Title ≤160; Category ≤60; Body ≤6000; không có FK tác giả hoặc bảng Category |
-| AssistantTurns / AssistantTurn | UserId, Question, Reply, Mode, CreatedAt | UserId FK Users; một hàng = một cặp hỏi/đáp; Mode mặc định knowledge; Question/Reply/Mode không có MaxLength ở entity; giới hạn câu hỏi ≤2000 ở request |
+| **Users** (tài khoản: Admin, Staff, Customer) | Id, DisplayName, Email, NormalizedEmail, PhoneNumber, PasswordHash, Role, IsActive, CreatedAt | PK Id; NormalizedEmail **UNIQUE**; PhoneNumber **UNIQUE** khi khác NULL; PasswordHash là hash PBKDF2 của ASP.NET Identity (không lưu mật khẩu rõ); Role ∈ {Admin, Staff, Customer} (trigger) |
+| **Tickets** (yêu cầu hỗ trợ) | Id, TicketNumber, Subject, Category, Status, Priority, Channel, SlaDueAt, CustomerId, AssigneeId, CreatedAt, UpdatedAt | PK; TicketNumber **UNIQUE**; Status ∈ {Open, In progress, Resolved, Closed}; Priority NULL hoặc ∈ {Thấp, Trung bình, Cao, Khẩn cấp}; Channel ∈ {web, chat} (mặc định web); AssigneeId phải là Staff/Admin (trigger) |
+| **TicketMessages** (lịch sử trao đổi) | Id, TicketId, AuthorId, Body, CreatedAt | Body không rỗng (trigger), ≤ 4.000 ký tự (kiểm tra ở ứng dụng) |
+| **KnowledgeArticles** (kho hướng dẫn/FAQ) | Id, Title, Category, Body, UpdatedAt | Title ≤ 160, Body ≤ 6.000 (ứng dụng) |
+| **AssistantTurns** (lịch sử trang Trợ lý) | Id, UserId, Question, Reply, Mode, CreatedAt | Mode: knowledge, ai, crm, crm-error |
+| **AuditLogs** (nhật ký thao tác) | Id, ActorId, ActorName, Action, Target, Detail, CreatedAt | Không FK để nhật ký còn khi xóa người dùng; không chứa mật khẩu/key/nội dung chat |
+| **ChatSessions** (phiên chatbot website) | Id, PublicId, TokenHash, UserId, ContactEmail, EmailVerified, VerificationSends, Mode, Status, TicketId, HandoffReason, Urgent, LastTicketMessageId, CreatedAt, UpdatedAt | PublicId **UNIQUE**; chỉ lưu SHA-256 của token phiên; Mode ∈ {bot, human}; Status ∈ {active, waiting_staff, staff_replied, closed} |
+| **ChatMessages** | Id, SessionId, Sender, Body, IsInternal, AuthorId, AuthorName, TicketMessageId, CreatedAt | Sender ∈ {customer, bot, staff, system}; IsInternal = ghi chú nội bộ, không bao giờ trả về API khách |
+| **AiLogs** (nhật ký vận hành AI) | Id, SessionId, Task, Provider, FallbackUsed, Success, DurationMs, RedactedCount, ToolRounds, ToolCalls, Error, CreatedAt | Không lưu câu hỏi, câu trả lời hay dữ liệu cá nhân; Task: chat, crm |
 
-Required và MaxLength/StringLength là metadata/model validation của .NET; SQLite TEXT không tự kiểm tra độ dài như VARCHAR(n). Controller/view model kiểm tra input; không có SQL CHECK cho role, category hoặc status. Category ticket và category bài hướng dẫn là chuỗi độc lập, không có bảng danh mục.
+Ràng buộc giá trị (tương đương CHECK) được cài bằng trigger `trg_*` BEFORE INSERT/UPDATE vì SQLite không thêm được CHECK vào bảng đã có mà không dựng lại bảng. Trigger chỉ kiểm tra dữ liệu ghi mới, không đụng hàng cũ. Ứng dụng kiểm tra cùng quy tắc trước khi ghi; trigger là lớp chặn cuối.
 
-## PK, FK, chỉ mục và xóa
+## Khóa ngoại, quy tắc xóa và chỉ mục
 
-| Liên kết / chỉ mục | Hiện thực |
+| Quan hệ / chỉ mục | Quy tắc |
 |---|---|
-| PK mỗi bảng | Id INTEGER, tự sinh |
-| IX_Users_NormalizedEmail | UNIQUE |
-| IX_Tickets_TicketNumber | UNIQUE |
-| Tickets.CustomerId → Users.Id | ON DELETE RESTRICT |
-| TicketMessages.TicketId → Tickets.Id | ON DELETE CASCADE |
-| TicketMessages.AuthorId → Users.Id | ON DELETE RESTRICT |
-| AssistantTurns.UserId → Users.Id | ON DELETE CASCADE |
-| IX_AssistantTurns_UserId_Id | Composite, không UNIQUE |
-| FK index do EF sinh | CustomerId, TicketId, AuthorId trên các bảng tương ứng |
+| Tickets.CustomerId → Users.Id | **RESTRICT** (không xóa khách hàng còn ticket qua SQL trực tiếp) |
+| Tickets.AssigneeId → Users.Id | **SET NULL**: xóa nhân viên → ticket về "Chưa phân công", không mất ticket |
+| TicketMessages.TicketId → Tickets.Id | CASCADE |
+| TicketMessages.AuthorId → Users.Id | RESTRICT: nhân viên đã trả lời ticket của người khác không xóa được (chỉ khóa) |
+| AssistantTurns.UserId → Users.Id | CASCADE |
+| ChatMessages.SessionId → ChatSessions.Id | CASCADE |
+| ChatSessions.UserId / TicketId | Không FK; xóa tài khoản xóa phiên liên quan trong cùng giao dịch (`UserAdministrationService.DeleteAsync`) |
+| Chỉ mục | UNIQUE: Users.NormalizedEmail, Users.PhoneNumber, Tickets.TicketNumber, ChatSessions.PublicId. Thường: Tickets(CustomerId), Tickets(Status), Tickets(AssigneeId), TicketMessages(TicketId), TicketMessages(AuthorId), AssistantTurns(UserId, Id), ChatMessages(SessionId, Id), ChatSessions(TicketId), AiLogs(SessionId) |
 
-Ứng dụng không có màn hình xóa user/ticket; cascade/restrict mô tả ràng buộc lưu trữ, không phải chức năng UI. Quyền riêng tư dựa trên lọc ở controller, không dựa vào DB row-level security.
+Giao dịch: xóa tài khoản (phiên chat, tin nhắn, ticket, lịch sử trợ lý, user) chạy trong một transaction. Các thao tác khác ghi một lần `SaveChanges` (EF bọc transaction).
 
-## ERD Mermaid
+## ERD
 
 ```mermaid
 erDiagram
-    Users ||--o{ Tickets : owns
-    Users ||--o{ TicketMessages : writes
-    Tickets ||--o{ TicketMessages : contains
-    Users ||--o{ AssistantTurns : chats
-    Users {
-        INTEGER Id PK
-        TEXT DisplayName
-        TEXT Email
+    Users ||--o{ Tickets : "khách hàng sở hữu"
+    Users |o--o{ Tickets : "nhân viên phụ trách (SET NULL)"
+    Users ||--o{ TicketMessages : viết
+    Tickets ||--o{ TicketMessages : chứa
+    Users ||--o{ AssistantTurns : hỏi
+    ChatSessions ||--o{ ChatMessages : chứa
+    ChatSessions |o..o| Tickets : "liên kết (không FK)"
+    ChatSessions |o..o| Users : "khách đăng nhập (không FK)"
+    Users { INTEGER Id PK
         TEXT NormalizedEmail UK
-        TEXT PasswordHash
+        TEXT PhoneNumber UK
         TEXT Role
-        TEXT CreatedAt
-    }
-    Tickets {
-        INTEGER Id PK
+        INTEGER IsActive }
+    Tickets { INTEGER Id PK
         TEXT TicketNumber UK
-        TEXT Subject
-        TEXT Category
         TEXT Status
+        TEXT Priority
+        TEXT Channel
+        TEXT SlaDueAt
         INTEGER CustomerId FK
-        TEXT CreatedAt
-        TEXT UpdatedAt
-    }
-    TicketMessages {
-        INTEGER Id PK
+        INTEGER AssigneeId FK }
+    TicketMessages { INTEGER Id PK
         INTEGER TicketId FK
         INTEGER AuthorId FK
-        TEXT Body
-        TEXT CreatedAt
-    }
-    KnowledgeArticles {
-        INTEGER Id PK
-        TEXT Title
-        TEXT Category
-        TEXT Body
-        TEXT UpdatedAt
-    }
-    AssistantTurns {
-        INTEGER Id PK
-        INTEGER UserId FK
-        TEXT Question
-        TEXT Reply
+        TEXT Body }
+    ChatSessions { INTEGER Id PK
+        TEXT PublicId UK
+        TEXT TokenHash
         TEXT Mode
-        TEXT CreatedAt
-    }
+        TEXT Status
+        INTEGER TicketId }
+    ChatMessages { INTEGER Id PK
+        INTEGER SessionId FK
+        TEXT Sender
+        INTEGER IsInternal }
 ```
 
-## Khởi tạo và lưu trữ
+KnowledgeArticles, AuditLogs và AiLogs đứng độc lập (không FK).
 
-`EnsureCreatedAsync` tạo DB mới; `SupportSchema.InitializeAsync` bổ sung KnowledgeArticles/AssistantTurns và chỉ mục bằng CREATE IF NOT EXISTS, giữ Users/Tickets/TicketMessages đã có. Seed 7 bài khi kho hoàn toàn rỗng. Không có EF migration hiện tại: EnsureCreated không tự chuyển đổi mọi schema cũ; thay đổi schema tương lai cần kế hoạch riêng và backup trước.
+## Khởi tạo, nâng cấp và dữ liệu mẫu
 
-Key Gemini không nằm trong bảng SQL: `App_Data/gemini-settings.json` chứa ciphertext Data Protection. Không đưa DB/backup/cấu hình local vào Git. Xem 12 về backup nhất quán với WAL và phục hồi khi ứng dụng đã dừng.
+- DB mới: `EnsureCreated` tạo toàn bộ bảng từ model, sau đó `SupportSchema` thêm trigger và 7 bài hướng dẫn mẫu.
+- DB cũ: `SupportSchema` chỉ **bổ sung** (CREATE TABLE/INDEX/TRIGGER IF NOT EXISTS, ALTER TABLE ADD COLUMN cho IsActive, PhoneNumber, Priority, Channel, SlaDueAt, AssigneeId, EmailVerified, VerificationSends). Không xóa, đổi tên hay ghi đè dữ liệu; chạy nhiều lần cho kết quả như nhau. Đã kiểm thử trên DB kiểu cũ có dữ liệu (ChatbotChecks mục 20). Dự án không dùng EF migrations.
+- Dữ liệu mẫu: `scripts/seed-demo.ps1` (tự backup trước) tạo 3 nhân viên, 14 khách hàng, 48 ticket có ưu tiên, SLA, người phụ trách. Tất cả tài khoản mẫu dùng `@demo.customersupport.vn`; mật khẩu sinh ngẫu nhiên ghi vào `App_Data/demo-accounts.txt` (Git bỏ qua). Chạy lại khi đã có dữ liệu mẫu chỉ điền các ô ưu tiên/người phụ trách còn trống của ticket mẫu. `-Remove` chỉ xóa dữ liệu mẫu.
+
+API key không nằm trong DB: `App_Data/gemini-settings.json` và `chatbot-settings.json` chứa ciphertext Data Protection. Sao lưu/khôi phục: xem [12-Deployment](12-Deployment.md).

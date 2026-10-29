@@ -9,17 +9,24 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 namespace CustomerSupportAI.Controllers;
 [Authorize]
-public sealed class AssistantController(AppDbContext db, AiAssistantService assistant) : Controller
+public sealed class AssistantController(AppDbContext db, AiAssistantService assistant, CrmAssistantService crm,
+    Microsoft.Extensions.Options.IOptions<SlaOptions> sla) : Controller
 {
     private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private bool IsStaff => User.IsInRole(UserRoles.Staff) || User.IsInRole(UserRoles.Admin);
     [HttpGet]
-    public async Task<IActionResult> Index() => View(new AssistantPageViewModel(
-        (await db.AssistantTurns.AsNoTracking().Where(t => t.UserId == UserId).OrderByDescending(t => t.Id).Take(50).ToListAsync()).AsEnumerable().Reverse().ToList(), assistant.IsConfigured));
+    public async Task<IActionResult> Index()
+    {
+        var history = (await db.AssistantTurns.AsNoTracking().Where(t => t.UserId == UserId).OrderByDescending(t => t.Id).Take(50).ToListAsync()).AsEnumerable().Reverse().ToList();
+        var provider = IsStaff ? crm.ProviderName : null;
+        return View(new AssistantPageViewModel(history, IsStaff ? provider is not null : assistant.IsConfigured, IsStaff, provider));
+    }
     [HttpPost, EnableRateLimiting("assistant")]
     public async Task<IActionResult> Ask([FromBody] AssistantMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(request.Message))
             return BadRequest(new { reply = "Vui lòng nhập câu hỏi từ 1 đến 2.000 ký tự." });
+        if (IsStaff) return await AskCrmAsync(request.Message.Trim(), cancellationToken);
         var history = (await db.AssistantTurns.AsNoTracking().Where(t => t.UserId == UserId).OrderByDescending(t => t.Id).Take(6).ToListAsync(cancellationToken)).AsEnumerable().Reverse().ToList();
         var allArticles = await db.KnowledgeArticles.AsNoTracking().ToListAsync(cancellationToken);
         var sources = KnowledgeSearch.ForAssistant(allArticles, request.Message, history.LastOrDefault()?.Question);
@@ -41,6 +48,24 @@ public sealed class AssistantController(AppDbContext db, AiAssistantService assi
         return Ok(new { reply = answer.Reply, mode = answer.Mode, notice = answer.Notice,
             sources = sources.Select(a => new { title = a.Title, url = Url.Action("Details", "Knowledge", new { id = a.Id }) }) });
     }
+
+    /// <summary>Staff/admin: read-only CRM assistant answering from live CRM data through query tools.</summary>
+    private async Task<IActionResult> AskCrmAsync(string question, CancellationToken cancellationToken)
+    {
+        var history = (await db.AssistantTurns.AsNoTracking().Where(t => t.UserId == UserId && t.Mode == "crm")
+            .OrderByDescending(t => t.Id).Take(6).ToListAsync(cancellationToken)).AsEnumerable().Reverse().ToList();
+        var answer = await crm.AskAsync(User, question, history, cancellationToken);
+        db.AssistantTurns.Add(new AssistantTurn { UserId = UserId, Question = question, Reply = answer.Reply, Mode = answer.Success ? "crm" : "crm-error" });
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new
+        {
+            reply = answer.Reply,
+            mode = answer.Success ? "crm" : "crm-error",
+            label = answer.Success ? $"AI · CRM ({answer.Provider})" : "Trợ lý CRM",
+            notice = answer.Notice,
+            sources = answer.Sources.Select(source => new { title = source.Title, url = source.Url })
+        });
+    }
     [HttpPost]
     public async Task<IActionResult> Clear()
     {
@@ -55,7 +80,9 @@ public sealed class AssistantController(AppDbContext db, AiAssistantService assi
         if (turns.Count == 0) return RedirectToAction("Create", "Tickets");
         var transcript = string.Join("\n\n", turns.Select(t => $"Khách hàng: {t.Question}\nTrợ lý ({t.Mode}): {t.Reply}"));
         var ticket = new SupportTicket { CustomerId = UserId, Subject = "Hỗ trợ tiếp: " + turns.Last().Question[..Math.Min(95, turns.Last().Question.Length)],
-            Category = "Other", TicketNumber = $"CS-{DateTimeOffset.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant() };
+            Category = "Other", TicketNumber = $"CS-{DateTimeOffset.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
+            Priority = SlaPolicy.DefaultPriority };
+        ticket.SlaDueAt = SlaPolicy.DueAt(ticket.CreatedAt, ticket.Priority, sla.Value);
         var body = "Tôi cần nhân viên hỗ trợ thêm. Cuộc trao đổi gần đây:\n" + transcript;
         ticket.Messages.Add(new TicketMessage { AuthorId = UserId, Body = body[..Math.Min(4000, body.Length)] });
         db.Tickets.Add(ticket); await db.SaveChangesAsync();

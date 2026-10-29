@@ -37,7 +37,7 @@ Lệnh trực tiếp không tự bật LocalSetup. [.env.example](.env.example) 
 |---|---|
 | Guest | Landing, đăng ký/đăng nhập, kho hướng dẫn công khai |
 | Customer | Tạo/tìm/xem/phản hồi ticket riêng; tổng quan/hoạt động riêng; trợ lý và chuyển chat thành ticket |
-| Staff | Đăng nhập tại màn hình chung `/Account/Login` (email hoặc số điện thoại), hệ thống tự nhận diện vai trò; xử lý mọi ticket/cập nhật trạng thái và danh mục; lọc hộp thư theo trạng thái, "chờ nhân viên phản hồi", danh mục, khách hàng, ngày tạo; dùng **công cụ AI trong ticket**; **xem, thêm, sửa, khóa/mở khóa, xóa khách hàng** tại `/Customers`; không quản lý Staff/Admin |
+| Staff | Đăng nhập tại màn hình chung `/Account/Login` (email hoặc số điện thoại), hệ thống tự nhận diện vai trò; xử lý mọi ticket, cập nhật trạng thái, danh mục, **mức ưu tiên** và **người phụ trách**; lọc hộp thư theo trạng thái, "chờ nhân viên phản hồi", danh mục, khách hàng, người phụ trách ("Giao cho tôi", "Chưa phân công"), ngày tạo; dùng **công cụ AI trong ticket** và **trợ lý CRM** (/Assistant); trả lời khách trong **Hội thoại chatbot**; **xem, thêm, sửa, khóa/mở khóa, xóa khách hàng** tại `/Customers`; không quản lý Staff/Admin |
 | Admin | Đăng nhập tại màn hình chung `/Account/Login`; xử lý ticket như Staff; **thêm/xem/sửa/khóa/xóa mọi tài khoản** (Admin, Staff, Customer) và đổi vai trò tại `/Admin/Users`; xem **nhật ký hoạt động** `/Admin/AuditLog`; tạo/sửa hướng dẫn; cấu hình/test Gemini |
 
 Mọi tài khoản đăng nhập có profile/đổi mật khẩu và lịch sử trợ lý riêng. Mọi vai trò đăng nhập tại một màn hình chung `/Account/Login` bằng email hoặc số điện thoại (khai báo khi đăng ký); máy chủ đọc vai trò trong DB rồi chuyển Khách hàng tới Tổng quan, Staff/Admin tới danh sách ticket. `/Account/StaffLogin` cũ chuyển hướng về trang này.
@@ -52,7 +52,7 @@ Mọi tài khoản đăng nhập có profile/đổi mật khẩu và lịch sử
 - **Chống dò mật khẩu**: 5 lần sai liên tiếp cho cùng IP + email sẽ bị chặn 15 phút (bộ nhớ tiến trình, mất khi khởi động lại; sau reverse proxy cần cấu hình ForwardedHeaders để lấy đúng IP).
 - **Nâng cấp DB cũ**: khi khởi động, app tự thêm cột `Users.IsActive` và bảng `AuditLogs` (additive, không mất dữ liệu).
 
-Chưa có phân công ticket, mức ưu tiên lưu trong DB, SLA, nhóm hỗ trợ, tệp đính kèm, ghi chú nội bộ hay thanh toán (schema hiện tại không có các cột/bảng này). Sidebar nhóm theo Tổng quan · Hỗ trợ khách hàng · Trí tuệ nhân tạo, Admin có thêm Quản lý vận hành (danh sách nhân viên) và Hệ thống; dashboard dùng số liệu thật, Staff thấy thêm số ticket chờ phản hồi và thời gian phản hồi đầu tiên trung bình (từ lúc tạo ticket đến tin nhắn đầu tiên của nhân viên, với ticket tạo trong kỳ).
+**Phân công ticket**: nhân viên chọn người phụ trách (nhân viên/quản trị đang hoạt động, kèm số yêu cầu đang mở) trong trang ticket; ghi nhật ký `ticket.assign`. Xóa tài khoản nhân viên → ticket về "Chưa phân công" (FK SET NULL), đổi nhân viên thành khách hàng → bỏ phân công các ticket của họ. Chưa có nhóm hỗ trợ, tệp đính kèm, ghi chú nội bộ trong ticket (ghi chú nội bộ chỉ có ở hội thoại chatbot) hay thanh toán. Sidebar nhóm theo Tổng quan · Hỗ trợ khách hàng · Trí tuệ nhân tạo, Admin có thêm Quản lý vận hành (danh sách nhân viên) và Hệ thống; dashboard dùng số liệu thật, Staff thấy thêm số ticket chờ phản hồi và thời gian phản hồi đầu tiên trung bình (từ lúc tạo ticket đến tin nhắn đầu tiên của nhân viên, với ticket tạo trong kỳ).
 
 
 ### Quên mật khẩu
@@ -80,11 +80,42 @@ Thiếu key/lỗi API/quota/timeout dùng **Tra cứu kho hướng dẫn** với
 
 Bảng "Trợ lý AI cho nhân viên" trong trang chi tiết ticket gọi `POST /Tickets/Ai/{id}` (`task` = `classify` | `draft` | `summary`, chung giới hạn 12 request/phút):
 
-- **Phân loại**: gợi ý danh mục (một trong 5 danh mục có sẵn), mức ưu tiên và lý do. Chỉ đổi danh mục khi nhân viên bấm *Áp dụng* và xác nhận; thay đổi ghi vào nhật ký `ticket.category`. Mức ưu tiên chỉ để tham khảo vì DB chưa có cột ưu tiên.
+- **Phân loại**: gợi ý danh mục (một trong 5 danh mục có sẵn), mức ưu tiên, lý do, **cảm xúc** (Tích cực/Trung lập/Lo lắng/Không hài lòng/Bức xúc) và **ý định** của khách; kèm **gợi ý người phụ trách** tính từ dữ liệu thật (nhân viên đang có ít yêu cầu mở nhất, không do AI đoán). Danh mục, mức ưu tiên và người phụ trách chỉ thay đổi khi nhân viên bấm *Áp dụng* và xác nhận trong hộp thoại; ghi nhật ký `ticket.category`, `ticket.priority`, `ticket.assign`.
 - **Soạn nháp phản hồi**: dựa trên lịch sử và tối đa 3 bài hướng dẫn liên quan; cấm hứa hoàn tiền/bồi thường/thời hạn không có trong hướng dẫn. Nhân viên sửa, sao chép, tạo lại hoặc chèn vào ô phản hồi; sau khi chèn phải tick xác nhận đã xem lại mới gửi được.
 - **Tóm tắt lịch sử**: vấn đề, các bước đã thử, phản hồi quan trọng, hiện trạng, việc cần làm, thông tin còn thiếu.
 
+### Trợ lý CRM cho nhân viên (/Assistant)
+
+Với Staff/Admin, trang Trợ lý trở thành trợ lý CRM **chỉ đọc**, chạy bằng Groq hoặc Gemini (cấu hình chatbot). AI chỉ gọi được 6 công cụ truy vấn dữ liệu thật: `crm_overview` (thống kê ticket/khách hàng N ngày, quá hạn SLA, chưa phân công, thời gian phản hồi đầu), `list_tickets`, `ticket_details`, `search_customers`, `customer_profile`, `staff_workload`. Không có công cụ thêm/sửa/xóa; AI chỉ đề xuất, nhân viên tự thực hiện trong màn hình ticket. Quyền kiểm tra ở controller và trong service (khách hàng bị từ chối trước khi gọi AI). Kết quả công cụ được ẩn email/số điện thoại trước khi gửi AI; khung bên phải liệt kê các bản ghi CRM đã tra cứu (có liên kết) để phân biệt dữ liệu với phần suy luận. Mỗi lần dùng ghi `AuditLogs` (`ai.crm`, chỉ tên công cụ) và `AiLogs` (task `crm`). Không có key thì báo cần cấu hình, **không** dùng mock để tránh số liệu giả. Prompt: `Prompts/crm_assistant_system.txt`.
+
 Dữ liệu gửi Gemini: tiêu đề, danh mục, trạng thái, tin nhắn đầu và 19 tin mới nhất (tối đa 600 ký tự/tin), vai trò người gửi; email, số điện thoại và dãy số ≥12 chữ số bị thay bằng `[đã ẩn]`; không gửi tên/email khách hàng. Không lưu kết quả AI vào ticket. Thiếu key hoặc lỗi API trả thông báo lỗi, **không** tạo kết quả thay thế. Mỗi lần dùng ghi nhật ký `ai.ticket`.
+
+## Chatbot hỗ trợ trên website
+
+Khách vãng lai và khách hàng đã đăng nhập có nút **Hỗ trợ trực tuyến** ở góc phải mỗi trang (`Views/Shared/_ChatWidget.cshtml`, `wwwroot/js/chat-widget.js`). Hỏi FAQ không cần đăng nhập. Luồng xử lý: widget → `ChatController` (`/api/chat/sessions`) → `ChatbotService` → nhà cung cấp AI (`Services/ChatProviders.cs`) → công cụ backend → SQLite.
+
+**Nhà cung cấp (chạy bằng API key)**: Admin chọn tại /Settings → *Chatbot hỗ trợ trên website*: `auto` (Groq nếu có key, rồi Gemini, cuối cùng Mock), `groq` (API key Groq tại console.groq.com/keys, gọi Chat Completions chuẩn OpenAI có function calling, model mặc định `openai/gpt-oss-120b`; có thể đổi sang model Groq khác hỗ trợ gọi công cụ như `llama-3.3-70b-versatile`), `gemini` (dùng chung key Gemini ở trên), `mock` (không gọi AI, dùng cho phát triển/kiểm thử). Key Groq được mã hóa như key Gemini; cũng nhận `Groq__ApiKey`/`GROQ_API_KEY`. Trang Trợ lý AI (/Assistant) và công cụ AI trong ticket vẫn dùng Gemini. Khi AI thật lỗi và bật dự phòng, chatbot dùng Mock và gắn nhãn "Chế độ dự phòng · không phải AI"; nhật ký ghi rõ việc dự phòng.
+
+**Công cụ AI được phép** (AI không truy cập DB trực tiếp, tối đa 4 vòng công cụ/tin nhắn):
+
+| Công cụ | Quy tắc backend |
+|---|---|
+| `search_faq(query)` | Tìm trong Kho hướng dẫn bằng `KnowledgeSearch` hiện có |
+| `get_ticket_status(ticket_id)` | Cần email phiên (hoặc tài khoản đăng nhập); chỉ trả ticket thuộc email đó; mã không tồn tại và mã của người khác nhận cùng một thông báo |
+| `create_ticket(title, description, category, priority)` | Kiểm tra độ dài, danh mục (5 danh mục hiện có) và ưu tiên (Thấp/Trung bình/Cao/Khẩn cấp); kênh `chat`; một phiên chỉ một ticket đang mở (gọi lặp lại trả ticket cũ) |
+| `handoff_to_human(reason, urgent)` | Tạo/dùng lại ticket, ghi lý do và hội thoại gần đây, `urgent` → ưu tiên Khẩn cấp; phiên chuyển sang chế độ nhân viên, bot ngừng trả lời |
+
+**Xác nhận email (khách vãng lai)**: email nhập ở widget hoặc trong tin nhắn được lưu vào phiên ở trạng thái *chưa xác nhận*, hệ thống gửi liên kết `/Chat/Verify?token=…` (ký bằng Data Protection, hiệu lực 24 giờ, chỉ đúng với email hiện tại của phiên). Trước khi khách bấm liên kết, `get_ticket_status`, `create_ticket` và `handoff_to_human` đều trả `email_unverified`, không đọc hay tạo dữ liệu nào. Tối đa 3 email xác nhận/phiên và 5 email/15 phút/IP. Dùng chung cấu hình gửi mail với *Quên mật khẩu* (Development không có SMTP thì ghi vào `App_Data/mail-outbox`); môi trường khác chưa cấu hình SMTP thì khách cần đăng nhập. Khách hàng đã đăng nhập được xác minh bằng tài khoản. Sau khi xác nhận, email chưa có tài khoản sẽ được tạo tài khoản khách hàng (mật khẩu ngẫu nhiên, nhận lại bằng *Quên mật khẩu*, ghi nhật ký `chat.customer-create`). Email của nhân viên/quản trị hoặc tài khoản bị khóa bị từ chối.
+
+**SLA phản hồi đầu**: hạn = thời điểm tạo + số giờ theo mức ưu tiên (mục `Sla:FirstResponseHours` trong appsettings.json, mặc định Khẩn cấp 4h, Cao 8h, Trung bình 24h, Thấp 72h; tính theo giờ lịch, chưa trừ ngoài giờ làm việc). Ticket tạo từ form web mặc định *Trung bình*; ticket từ chatbot theo mức AI chọn, chuyển nhân viên khẩn cấp → *Khẩn cấp*. Nhân viên đổi mức ưu tiên trong trang ticket (ghi nhật ký `ticket.priority`), hạn được tính lại. Trang ticket và console chat hiện *Hạn phản hồi đầu / Quá hạn / Đạt / Trễ SLA*; danh sách ticket đánh dấu *Quá hạn SLA*. Ticket cũ (trước khi có cột) không có ưu tiên nên không có SLA cho tới khi nhân viên đặt.
+
+**Bảo vệ dữ liệu**: trước khi gửi AI, email/số điện thoại/số thẻ ≥12 chữ số/CMND-CCCD/mật khẩu/OTP được thay bằng `[ĐÃ_ẨN_…]` (cả tin nhắn, lịch sử và kết quả công cụ). Phản hồi AI được kiểm tra: xin mật khẩu/OTP/CVV → thay bằng thông báo an toàn; hứa hoàn tiền/bồi thường/giảm giá → thêm cảnh báo cần nhân viên xem xét; tự nhận "đã tạo yêu cầu" khi backend chưa lưu → bị thay. System prompt ở `Prompts/chatbot_system.txt`. Bảng `AiLogs` lưu nhà cung cấp, dự phòng, thời gian, số mục đã ẩn, danh sách công cụ — không lưu nội dung.
+
+**Giới hạn** (mục `Chatbot` trong appsettings.json): 10 tin/phút/phiên, 20 phiên/phút/IP, 1.000 ký tự/tin, 4 vòng công cụ. Phiên được xác thực bằng token ngẫu nhiên (DB chỉ lưu SHA-256) và gắn với tài khoản đang đăng nhập.
+
+**Nhân viên**: menu *Hội thoại chatbot* (`/ChatAdmin`, Staff/Admin) lọc theo trạng thái, xem hội thoại tự cập nhật 4 giây/lần, mở ticket liên quan, gửi **phản hồi công khai** (hiện trong khung chat của khách và lưu vào ticket) hoặc **ghi chú nội bộ** (không bao giờ trả về API khách). Phản hồi viết trong màn hình ticket cũng tự hiện trong khung chat. Admin xem thêm nhật ký công cụ AI. API: `GET /api/chat/admin/sessions?status=`, `GET /api/chat/admin/sessions/{id}`, `POST …/{id}/replies`, `POST …/{id}/status`; chưa đăng nhập → 401, khách hàng → 403.
+
+**CSDL**: thêm bảng `ChatSessions`, `ChatMessages`, `AiLogs` và cột `Tickets.Priority` (null cho ticket cũ), `Tickets.Channel` (mặc định `web`), `Tickets.SlaDueAt` theo kiểu bổ sung khi khởi động; dữ liệu cũ giữ nguyên. Ticket hiện ưu tiên (cho nhân viên) và nhãn *Tiếp nhận qua chatbot*.
 
 ## Dữ liệu mẫu (demo)
 
@@ -102,6 +133,7 @@ Tạo 3 nhân viên, 14 khách hàng, 48 yêu cầu (~150 tin nhắn) trải tro
 ```powershell
 dotnet build .\CustomerSupportAI.csproj
 dotnet run --project .\verification\ServiceChecks\ServiceChecks.csproj
+dotnet run --project .\verification\ChatbotChecks\ChatbotChecks.csproj
 dotnet build .\verification\BrowserChecks\BrowserChecks.csproj
 .\verification\HttpChecks.ps1 -CaptureBrowser
 dotnet run --project .\verification\DatabaseChecks\DatabaseChecks.csproj
@@ -132,18 +164,41 @@ Thêm -DatabasePath cho DB tùy chỉnh. Backup dùng API SQLite nhất quán v�
 ## Cấu trúc
 
 ```text
-Controllers/          MVC endpoints và phân quyền
-Models/, ViewModels/  Entity, input/validation và UI models
-Data/                 DbContext, khởi tạo và seed
-Services/             Gemini, cấu hình mã hóa, tìm hướng dẫn
-Views/, wwwroot/      Razor, CSS, JavaScript
-verification/         Service, HTTP, Browser, LiveGemini, DatabaseChecks
-scripts/              Backup/restore PowerShell
+Controllers/          MVC + API endpoints, phân quyền [Authorize] theo vai trò
+  TicketsController     ticket: danh sách/lọc, tạo, trả lời, trạng thái, danh mục, ưu tiên, phân công, công cụ AI
+  CustomersController   CRUD khách hàng (Staff/Admin); AdminController: mọi tài khoản, nhật ký
+  ChatController        API chatbot công khai (/api/chat/sessions), trang xác nhận email /Chat/Verify
+  ChatAdminController   console hội thoại chatbot + API quản trị (/api/chat/admin)
+  AssistantController   trợ lý khách hàng (Gemini) và trợ lý CRM (nhân viên)
+Models/, ViewModels/  Entity, validation, UI models, DisplayText (nhãn tiếng Việt)
+Data/                 AppDbContext, nâng cấp schema bổ sung (SupportSchema), ràng buộc (IntegrityRules), dữ liệu mẫu
+Services/             Nghiệp vụ và tích hợp AI:
+  ChatbotService        chatbot: phiên, 4 công cụ, chuyển nhân viên, xác nhận email, đồng bộ ticket
+  CrmAssistantService   trợ lý CRM chỉ đọc (6 công cụ truy vấn)
+  ChatToolLoop          vòng gọi công cụ dùng chung (tối đa 4 vòng)
+  ChatProviders         IChatProvider: Groq, Gemini, Mock — đổi nhà cung cấp không đụng nghiệp vụ
+  ChatSafety            ẩn dữ liệu cá nhân + kiểm tra câu trả lời AI
+  TicketAiService, AiAssistantService  công cụ AI trong ticket, trợ lý khách (Gemini)
+  SlaPolicy, UserAdministrationService, *SettingsStore, EmailSender, LoginThrottle
+Prompts/              System prompt của chatbot và trợ lý CRM
+Views/, wwwroot/      Razor, CSS (tokens.css + site.css), JavaScript (chat-widget, chat-console, ticket, assistant)
+verification/         ServiceChecks, ChatbotChecks, HttpChecks + BrowserChecks, DatabaseChecks, LiveGemini
+scripts/              Backup/restore/seed PowerShell
+Dockerfile, docker-compose.yml  Chạy bằng container, dữ liệu trong volume /data
 docs/                 12 tài liệu, ai-evidence và báo cáo verification
-App_Data/, *.db       Dữ liệu local, bỏ Git
+App_Data/, *.db       Dữ liệu local, bỏ Git và không đưa vào bản publish
 ```
 
-bin/, obj/, App_Data/, DB/backup, key, log, verification-artifacts/browser profile bỏ Git, vẫn giữ trên máy. Startup EnsureCreated và SQL bổ sung 2 bảng; chưa dùng EF migrations.
+bin/, obj/, App_Data/, DB/backup, key, log, verification-artifacts/browser profile bỏ Git, vẫn giữ trên máy. Startup dùng EnsureCreated cho DB mới và SQL bổ sung (bảng, cột, chỉ mục, trigger) cho DB cũ; không dùng EF migrations. Chi tiết: [docs/05](docs/05-Thiet-ke-CSDL.md).
+
+## Chạy bằng Docker
+
+```powershell
+Copy-Item .env.example .env   # điền BootstrapAdmin__Email/Password; tùy chọn Groq__ApiKey, Gemini__ApiKey, SMTP
+docker compose up -d --build  # http://localhost:8080 (Production, dữ liệu trong volume /data)
+```
+
+Xem [docs/12-Deployment](docs/12-Deployment.md) (sao lưu volume, HTTPS qua reverse proxy). Image chưa được build thử trên máy phát triển (Docker Desktop không chạy); bản publish Release đã được chạy thử ở Production với cùng cấu hình.
 
 ## Tài liệu môn học
 

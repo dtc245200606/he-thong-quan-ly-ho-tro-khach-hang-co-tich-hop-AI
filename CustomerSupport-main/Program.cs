@@ -3,6 +3,7 @@ using CustomerSupportAI.Data;
 using CustomerSupportAI.Models;
 using CustomerSupportAI.Services;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
@@ -39,6 +40,14 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
     options.SupportedCultures = [vietnameseCulture];
     options.SupportedUICultures = [vietnameseCulture];
 });
+// Fixed application name: encrypted settings (API keys) stay readable when the project folder is moved or renamed.
+// Without it ASP.NET isolates keys by content-root path.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("CustomerSupportAI");
+// Containers and servers: keep the key ring on persistent storage, or saved API keys become unreadable after a restart.
+if (builder.Configuration["DataProtection:KeysDirectory"] is { Length: > 0 } keysDirectory)
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+}
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -50,6 +59,19 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
+        // JSON APIs answer 401/403 instead of redirecting to the sign-in page.
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api")) context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            else context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api")) context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            else context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
         // Re-check the account on every request so locking, deleting or changing the role of a user
         // takes effect immediately instead of waiting for the cookie to expire.
         options.Events.OnValidatePrincipal = async context =>
@@ -86,11 +108,34 @@ builder.Services.AddHttpClient<AiAssistantService>(client => client.Timeout = Ti
 builder.Services.AddScoped<TicketAiService>();
 builder.Services.AddSingleton<PasswordResetTokens>();
 builder.Services.AddSingleton<EmailSender>();
+// Website chatbot: provider choice + Groq key (encrypted), limits from the "Chatbot" section, and the three providers.
+var chatbotLimits = builder.Configuration.GetSection("Chatbot").Get<ChatbotOptions>() ?? new ChatbotOptions();
+builder.Services.Configure<ChatbotOptions>(builder.Configuration.GetSection("Chatbot"));
+builder.Services.Configure<SlaOptions>(builder.Configuration.GetSection("Sla"));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ChatbotSettingsStore>();
+builder.Services.AddSingleton(services => ChatbotPrompt.Load(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath));
+builder.Services.AddHttpClient<GeminiChatProvider>(client => client.Timeout = TimeSpan.FromSeconds(45));
+builder.Services.AddHttpClient<GroqChatProvider>(client => client.Timeout = TimeSpan.FromSeconds(45));
+builder.Services.AddTransient<IChatProvider>(services => services.GetRequiredService<GroqChatProvider>());
+builder.Services.AddTransient<IChatProvider>(services => services.GetRequiredService<GeminiChatProvider>());
+builder.Services.AddSingleton<IChatProvider, MockChatProvider>();
+builder.Services.AddScoped<ChatbotService>();
+// Staff CRM assistant (read-only tools) on the Assistant page.
+builder.Services.AddSingleton(services => new CrmPrompt(
+    ChatbotPrompt.Load(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "crm_assistant_system.txt").Text));
+builder.Services.AddScoped<CrmAssistantService>();
 builder.Services.AddRateLimiter(options => {
     options.RejectionStatusCode = 429;
     options.AddPolicy("assistant", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 12, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("chat-session", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = chatbotLimits.SessionsPerMinutePerIp, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("chat-message", context => RateLimitPartition.GetFixedWindowLimiter(
+        "session:" + (context.Request.RouteValues["id"]?.ToString() ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous"),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = chatbotLimits.MessagesPerMinutePerSession, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
 var app = builder.Build();
@@ -123,6 +168,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
+app.MapControllers();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

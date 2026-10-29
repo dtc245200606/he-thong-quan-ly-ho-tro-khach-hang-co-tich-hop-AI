@@ -11,7 +11,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CustomerSupportAI.Controllers;
 
 [Authorize]
-public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi, UserAdministrationService admin) : Controller
+public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi, UserAdministrationService admin,
+    Microsoft.Extensions.Options.IOptions<SlaOptions> sla) : Controller
 {
     private static readonly string[] Categories =
     [
@@ -32,7 +33,7 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
     private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
 
     public async Task<IActionResult> Index(string? search, string? status, string? category, int? customerId,
-        DateOnly? from, DateOnly? to, string? sort, int page = 1)
+        DateOnly? from, DateOnly? to, string? sort, string? assignee, int page = 1)
     {
         var staff = IsStaff();
         var tickets = VisibleTickets();
@@ -59,6 +60,26 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
         else
         {
             status = null;
+        }
+
+        // Assignee filter (staff only): "me", "none" or a staff user id; anything else is ignored.
+        var staffOptions = staff ? await StaffOptionsAsync() : [];
+        if (staff && assignee == "me")
+        {
+            var me = CurrentUserId();
+            tickets = tickets.Where(ticket => ticket.AssigneeId == me);
+        }
+        else if (staff && assignee == "none")
+        {
+            tickets = tickets.Where(ticket => ticket.AssigneeId == null);
+        }
+        else if (staff && int.TryParse(assignee, out var assigneeId) && staffOptions.Any(option => option.Id == assigneeId))
+        {
+            tickets = tickets.Where(ticket => ticket.AssigneeId == assigneeId);
+        }
+        else
+        {
+            assignee = null;
         }
 
         category = category is not null && Categories.Contains(category, StringComparer.Ordinal) ? category : null;
@@ -116,6 +137,7 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
         var paging = PageInfo.For(page, PageSize, await tickets.CountAsync());
         var items = await tickets
             .Include(ticket => ticket.Customer)
+            .Include(ticket => ticket.Assignee)
             .Skip(paging.Skip)
             .Take(paging.PageSize)
             .ToListAsync();
@@ -132,12 +154,20 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
             .Where(message => lastIds.Contains(message.Id) && message.Author.Role == UserRoles.Customer)
             .Select(message => message.TicketId)
             .ToListAsync();
+        // First-response SLA breached: no staff reply yet and the deadline has passed.
+        var answered = await db.TicketMessages
+            .Where(message => pageIds.Contains(message.TicketId) && message.Author.Role != UserRoles.Customer)
+            .Select(message => message.TicketId).Distinct().ToListAsync();
+        var now = DateTimeOffset.UtcNow;
+        var overdue = items.Where(ticket => !answered.Contains(ticket.Id) &&
+            SlaPolicy.State(ticket.SlaDueAt, ticket.Status, null, now) == SlaState.Overdue).Select(ticket => ticket.Id).ToHashSet();
 
         return View(new TicketIndexViewModel
         {
             Tickets = items,
             MessageCounts = threads.ToDictionary(thread => thread.TicketId, thread => thread.Count),
             AwaitingTeam = lastByCustomer.ToHashSet(),
+            SlaOverdue = overdue,
             Paging = paging,
             Sort = sort,
             Search = search?.Trim() ?? string.Empty,
@@ -151,7 +181,9 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
             OpenCount = openCount,
             ResolvedCount = resolvedCount,
             AwaitingCount = awaitingCount,
-            IsStaff = staff
+            IsStaff = staff,
+            Assignee = assignee ?? string.Empty,
+            StaffOptions = staffOptions
         });
     }
 
@@ -174,13 +206,19 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
         }
 
         var customerId = CurrentUserId();
+        var now = DateTimeOffset.UtcNow;
         var ticket = new SupportTicket
         {
-            TicketNumber = $"CS-{DateTimeOffset.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
+            TicketNumber = $"CS-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
             Subject = model.Subject.Trim(),
             Category = model.Category,
             Status = "Open",
-            CustomerId = customerId
+            CustomerId = customerId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            // Portal tickets start at the default priority; staff can change it, which recomputes the SLA.
+            Priority = SlaPolicy.DefaultPriority,
+            SlaDueAt = SlaPolicy.DueAt(now, SlaPolicy.DefaultPriority, sla.Value)
         };
         ticket.Messages.Add(new TicketMessage
         {
@@ -199,6 +237,7 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
     {
         var ticket = await VisibleTickets()
             .Include(item => item.Customer)
+            .Include(item => item.Assignee)
             .Include(item => item.Messages.OrderBy(message => message.Id))
                 .ThenInclude(message => message.Author)
             .SingleOrDefaultAsync(item => item.Id == id);
@@ -214,7 +253,8 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
             IsStaff = IsStaff(),
             Categories = Categories,
             AiConfigured = ticketAi.IsConfigured,
-            CustomerTicketCount = IsStaff() ? await db.Tickets.CountAsync(item => item.CustomerId == ticket.CustomerId) : 0
+            CustomerTicketCount = IsStaff() ? await db.Tickets.CountAsync(item => item.CustomerId == ticket.CustomerId) : 0,
+            StaffOptions = IsStaff() ? await StaffOptionsAsync() : []
         });
     }
 
@@ -307,6 +347,87 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
         return RedirectToAction(nameof(Details), new { id });
     }
 
+    /// <summary>Assigns the ticket to an active staff member/admin, or unassigns it when assigneeId is empty.</summary>
+    [Authorize(Roles = UserRoles.Admin + "," + UserRoles.Staff)]
+    [HttpPost]
+    public async Task<IActionResult> UpdateAssignee(int id, int? assigneeId)
+    {
+        var ticket = await db.Tickets.Include(item => item.Assignee).SingleOrDefaultAsync(item => item.Id == id);
+        if (ticket is null)
+        {
+            return NotFound();
+        }
+
+        SupportUser? assignee = null;
+        if (assigneeId is { } targetId)
+        {
+            assignee = await db.Users.SingleOrDefaultAsync(user => user.Id == targetId && user.IsActive &&
+                (user.Role == UserRoles.Staff || user.Role == UserRoles.Admin));
+            if (assignee is null)
+            {
+                TempData["Error"] = "Người phụ trách phải là nhân viên hoặc quản trị viên đang hoạt động.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+        }
+
+        if (ticket.AssigneeId != assigneeId)
+        {
+            var previous = ticket.Assignee?.DisplayName ?? "chưa phân công";
+            ticket.AssigneeId = assignee?.Id;
+            ticket.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+            await admin.AuditAsync(User, "ticket.assign", ticket.TicketNumber, $"{previous} → {assignee?.DisplayName ?? "chưa phân công"}");
+        }
+
+        TempData["Success"] = assignee is null ? "Đã bỏ phân công yêu cầu." : $"Đã giao yêu cầu cho {assignee.DisplayName}.";
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    /// <summary>Active staff and admins with their open (Open/In progress) assigned tickets, lightest workload first.</summary>
+    private async Task<IReadOnlyList<StaffOption>> StaffOptionsAsync() =>
+        (await db.Users.AsNoTracking()
+            .Where(user => user.IsActive && (user.Role == UserRoles.Staff || user.Role == UserRoles.Admin))
+            .Select(user => new
+            {
+                user.Id, user.DisplayName, user.Role,
+                Open = db.Tickets.Count(ticket => ticket.AssigneeId == user.Id && (ticket.Status == "Open" || ticket.Status == "In progress"))
+            })
+            .ToListAsync())
+            // Sorted in memory: EF cannot translate ordering on a constructed record.
+            .Select(row => new StaffOption(row.Id, row.DisplayName, row.Role, row.Open))
+            .OrderBy(option => option.OpenTickets).ThenBy(option => option.Name, StringComparer.CurrentCulture)
+            .ToList();
+
+    /// <summary>Changes the priority and recomputes the first-response SLA from the creation time.</summary>
+    [Authorize(Roles = UserRoles.Admin + "," + UserRoles.Staff)]
+    [HttpPost]
+    public async Task<IActionResult> UpdatePriority(int id, string priority)
+    {
+        if (!TicketAiService.Priorities.Contains(priority, StringComparer.Ordinal))
+        {
+            return BadRequest();
+        }
+
+        var ticket = await db.Tickets.SingleOrDefaultAsync(item => item.Id == id);
+        if (ticket is null)
+        {
+            return NotFound();
+        }
+
+        if (ticket.Priority != priority)
+        {
+            var previous = ticket.Priority ?? "chưa đặt";
+            ticket.Priority = priority;
+            ticket.SlaDueAt = SlaPolicy.DueAt(ticket.CreatedAt, priority, sla.Value);
+            ticket.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+            await admin.AuditAsync(User, "ticket.priority", ticket.TicketNumber, $"{previous} → {priority}");
+        }
+
+        TempData["Success"] = "Đã cập nhật mức ưu tiên và hạn phản hồi.";
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
     /// <summary>
     /// Staff AI tools: task = classify | draft | summary. Returns a suggestion as JSON and saves nothing
     /// to the ticket; staff review it and apply it through the normal forms.
@@ -337,7 +458,15 @@ public sealed class TicketsController(AppDbContext db, TicketAiService ticketAi,
             error = result.Error;
             if (result.Value is { } c)
             {
-                value = new { category = c.Category, categoryText = DisplayText.TicketCategory(c.Category), priority = c.Priority, reason = c.Reason, same = c.Category == ticket.Category };
+                // Assignee suggestion is computed from real workload (lightest open queue), not guessed by the model.
+                var suggested = (await StaffOptionsAsync()).FirstOrDefault();
+                value = new
+                {
+                    category = c.Category, categoryText = DisplayText.TicketCategory(c.Category), priority = c.Priority, reason = c.Reason,
+                    same = c.Category == ticket.Category, samePriority = c.Priority == ticket.Priority,
+                    sentiment = c.Sentiment, intent = c.Intent,
+                    assignee = suggested is null ? null : new { id = suggested.Id, name = suggested.Name, open = suggested.OpenTickets, same = suggested.Id == ticket.AssigneeId }
+                };
             }
         }
         else if (task == "draft")

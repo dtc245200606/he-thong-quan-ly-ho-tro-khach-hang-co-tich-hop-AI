@@ -1,0 +1,45 @@
+@using System.Security.Claims
+@* Website chatbot for guests and customers. Behaviour: wwwroot/js/chat-widget.js; API: ChatController. *@
+@{
+    var owner = User.IsInRole(UserRoles.Customer) ? User.FindFirstValue(ClaimTypes.NameIdentifier) : "guest";
+}
+<div class="cw" id="chat-widget" data-api="@Url.Content("~/api/chat/sessions")" data-owner="@owner" data-max="1000">
+    <form id="cw-csrf" class="visually-hidden">@Html.AntiForgeryToken()</form>
+    <button class="cw-launcher" type="button" data-cw-toggle aria-expanded="false" aria-controls="cw-panel">
+        <icon name="message-circle-question" /><span>Hỗ trợ trực tuyến</span>
+    </button>
+    <section class="cw-panel" id="cw-panel" role="dialog" aria-modal="false" aria-labelledby="cw-title" hidden>
+        <header class="cw-head">
+            <span class="bot-avatar sm"><icon name="bot" /></span>
+            <div class="cw-head-text">
+                <strong id="cw-title">Hỗ trợ CustomerSupport</strong>
+                <span id="cw-status">Trợ lý tự động · trả lời ngay</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" type="button" data-cw-handoff title="Chuyển cuộc trò chuyện cho nhân viên hỗ trợ"><icon name="headset" class="icon-sm" /><span class="cw-hide-xs">Gặp nhân viên</span></button>
+            <button class="btn btn-ghost btn-icon btn-sm" type="button" data-cw-toggle aria-label="Đóng cửa sổ trò chuyện"><icon name="x" /></button>
+        </header>
+        <div class="cw-messages" id="cw-messages" aria-live="polite" aria-label="Nội dung trò chuyện">
+            <div class="chat-message chat-assistant">
+                <span class="bot-avatar sm"><icon name="bot" /></span>
+                <div class="chat-bubble chat-greeting">
+                    <strong>Xin chào!</strong>
+                    Tôi có thể trả lời câu hỏi thường gặp, tra cứu trạng thái yêu cầu (mã CS-…), tạo yêu cầu hỗ trợ mới hoặc chuyển bạn tới nhân viên.
+                </div>
+            </div>
+        </div>
+        <form class="cw-email" id="cw-email" hidden>
+            <label class="field-label" for="cw-email-input">Email liên hệ</label>
+            <div class="cw-email-row">
+                <input id="cw-email-input" type="email" maxlength="320" autocomplete="email" placeholder="ban@example.com" required />
+                <button class="btn btn-secondary btn-sm" type="submit"><icon name="mail" class="icon-sm" />Lưu</button>
+            </div>
+            <span class="field-hint">Dùng để xác minh yêu cầu của bạn và để nhân viên phản hồi. Không cần mật khẩu.</span>
+        </form>
+        <form class="composer cw-composer" id="cw-form">
+            <label class="visually-hidden" for="cw-input">Tin nhắn</label>
+            <textarea id="cw-input" rows="1" maxlength="1000" placeholder="Nhập câu hỏi của bạn…" required></textarea>
+            <button class="btn btn-primary btn-icon" id="cw-send" type="submit" aria-label="Gửi"><icon name="send" /></button>
+        </form>
+        <p class="cw-note">AI có thể sai. Không gửi mật khẩu, OTP hoặc thông tin thẻ.</p>
+    </section>
+</div>

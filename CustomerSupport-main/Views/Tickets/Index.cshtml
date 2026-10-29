@@ -85,6 +85,18 @@
                 <option value="@category" selected="@(Model.Category == category ? "selected" : null)">@DisplayText.TicketCategory(category)</option>
             }
         </select>
+        @if (Model.IsStaff)
+        {
+            <select name="assignee" aria-label="Lọc theo người phụ trách">
+                <option value="">Mọi người phụ trách</option>
+                <option value="me" selected="@(Model.Assignee == "me" ? "selected" : null)">Giao cho tôi</option>
+                <option value="none" selected="@(Model.Assignee == "none" ? "selected" : null)">Chưa phân công</option>
+                @foreach (var s in Model.StaffOptions)
+                {
+                    <option value="@s.Id" selected="@(Model.Assignee == s.Id.ToString() ? "selected" : null)">@s.Name</option>
+                }
+            </select>
+        }
         <details class="date-filter" data-dropdown>
             <summary class="btn @(hasDates ? "btn-outline" : "btn-ghost")"><icon name="calendar" />@(hasDates ? $"{Model.From?.ToString("dd/MM/yyyy") ?? "…"} – {Model.To?.ToString("dd/MM/yyyy") ?? "…"}" : "Ngày tạo")</summary>
             <div class="date-filter-fields">
@@ -148,7 +160,10 @@
                             </td>
                             @if (Model.IsStaff)
                             {
-                                <td><a class="link-quiet" asp-action="Index" asp-route-customerId="@ticket.CustomerId" title="Lọc yêu cầu của khách hàng này">@ticket.Customer.DisplayName</a></td>
+                                <td>
+                                    <a class="link-quiet" asp-action="Index" asp-route-customerId="@ticket.CustomerId" title="Lọc yêu cầu của khách hàng này">@ticket.Customer.DisplayName</a>
+                                    <div class="cell-sub">@(ticket.Assignee is null ? "Chưa phân công" : $"Phụ trách: {ticket.Assignee.DisplayName}")</div>
+                                </td>
                             }
                             <td>@DisplayText.TicketCategory(ticket.Category)</td>
                             <td>
@@ -156,6 +171,10 @@
                                 @if (awaiting)
                                 {
                                     <div class="cell-sub text-danger">Chờ phản hồi</div>
+                                }
+                                @if (Model.IsStaff && Model.SlaOverdue.Contains(ticket.Id))
+                                {
+                                    <div class="cell-sub text-danger">Quá hạn SLA (@ticket.Priority)</div>
                                 }
                             </td>
                             <td class="num">@Model.MessageCounts.GetValueOrDefault(ticket.Id)</td>

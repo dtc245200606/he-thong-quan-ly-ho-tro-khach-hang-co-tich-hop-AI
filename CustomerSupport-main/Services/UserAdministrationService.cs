@@ -138,6 +138,14 @@ public sealed class UserAdministrationService(AppDbContext db, IPasswordHasher<S
         if (target.Role != newRole) changes.Add($"vai trò → {DisplayText.Role(newRole)}");
         if (target.IsActive != newActive) changes.Add(newActive ? "mở khóa" : "khóa tài khoản");
 
+        // A demoted staff member can no longer own tickets: return them to the unassigned queue.
+        if (newRole == UserRoles.Customer && target.Role != UserRoles.Customer)
+        {
+            var released = await db.Tickets.Where(ticket => ticket.AssigneeId == target.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(ticket => ticket.AssigneeId, (int?)null));
+            if (released > 0) changes.Add($"bỏ phân công {released} yêu cầu");
+        }
+
         target.DisplayName = trimmedName;
         target.Email = trimmedEmail;
         target.NormalizedEmail = normalized;
@@ -218,6 +226,11 @@ public sealed class UserAdministrationService(AppDbContext db, IPasswordHasher<S
         await using (var transaction = await db.Database.BeginTransactionAsync())
         {
             var ownTicketIds = db.Tickets.Where(ticket => ticket.CustomerId == id).Select(ticket => ticket.Id);
+            // Chat sessions of this customer or linked to their tickets (no FK, so removed explicitly).
+            var ownChats = db.ChatSessions.Where(session => session.UserId == id ||
+                (session.TicketId != null && ownTicketIds.Contains(session.TicketId.Value))).Select(session => session.Id);
+            await db.ChatMessages.Where(message => ownChats.Contains(message.SessionId)).ExecuteDeleteAsync();
+            await db.ChatSessions.Where(session => ownChats.Contains(session.Id)).ExecuteDeleteAsync();
             await db.TicketMessages.Where(message => ownTicketIds.Contains(message.TicketId)).ExecuteDeleteAsync();
             ticketsDeleted = await db.Tickets.Where(ticket => ticket.CustomerId == id).ExecuteDeleteAsync();
             await db.AssistantTurns.Where(turn => turn.UserId == id).ExecuteDeleteAsync();

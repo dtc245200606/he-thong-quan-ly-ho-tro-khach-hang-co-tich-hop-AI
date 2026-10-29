@@ -1,0 +1,32 @@
+# Usage: copy .env.example to .env, fill BootstrapAdmin__Email/Password (and optionally AI keys), then:
+#   docker compose up -d --build
+# App: http://localhost:8080. Data persists in the "customer-support-data" volume.
+services:
+  web:
+    build: .
+    image: customer-support:local
+    ports:
+      - "8080:8080"
+    environment:
+      # Fixed on purpose: .env.example says Development for local runs, which would expose detailed error pages.
+      ASPNETCORE_ENVIRONMENT: Production
+      BootstrapAdmin__Email: ${BootstrapAdmin__Email:-}
+      BootstrapAdmin__Password: ${BootstrapAdmin__Password:-}
+      BootstrapAdmin__Name: ${BootstrapAdmin__Name:-CustomerSupport Administrator}
+      Gemini__ApiKey: ${Gemini__ApiKey:-}
+      Gemini__Model: ${Gemini__Model:-gemini-3.8-flash}
+      Groq__ApiKey: ${Groq__ApiKey:-}
+      Groq__Model: ${Groq__Model:-openai/gpt-oss-120b}
+      Chatbot__Provider: ${Chatbot__Provider:-auto}
+      App__BaseUrl: ${App__BaseUrl:-}
+      Smtp__Host: ${Smtp__Host:-}
+      Smtp__Port: ${Smtp__Port:-587}
+      Smtp__User: ${Smtp__User:-}
+      Smtp__Password: ${Smtp__Password:-}
+      Smtp__From: ${Smtp__From:-}
+    volumes:
+      - customer-support-data:/data
+    restart: unless-stopped
+
+volumes:
+  customer-support-data:

@@ -9,6 +9,9 @@
     var statuses = new[] { "Open", "In progress", "Resolved", "Closed" };
     var currentStep = Array.IndexOf(statuses, ticket.Status);
     string StatusIcon(string s) => s switch { "Open" => "inbox", "In progress" => "clock", "Resolved" => "circle-check", _ => "lock" };
+    var firstStaffReply = messages.FirstOrDefault(item => item.Author.Role != UserRoles.Customer)?.CreatedAt;
+    var slaState = SlaPolicy.State(ticket.SlaDueAt, ticket.Status, firstStaffReply, DateTimeOffset.UtcNow);
+    var slaDue = ticket.SlaDueAt?.ToOffset(local).ToString("HH:mm dd/MM/yyyy");
 }
 
 <a class="back-link" asp-action="Index"><icon name="arrow-left" class="icon-sm" />@(Model.IsStaff ? "Hàng đợi hỗ trợ" : "Yêu cầu của tôi")</a>
@@ -23,6 +26,30 @@
                 <span class="badge badge-danger">Chờ nhân viên phản hồi</span>
             }
             <span><icon name="file-text" />@DisplayText.TicketCategory(ticket.Category)</span>
+            @if (Model.IsStaff && ticket.Priority is not null)
+            {
+                <span class="@(ticket.Priority is "Cao" or "Khẩn cấp" ? "badge badge-danger" : "badge badge-neutral")">Ưu tiên: @ticket.Priority</span>
+            }
+            @if (Model.IsStaff && slaState != SlaState.None)
+            {
+                <span class="@(slaState switch { SlaState.Overdue or SlaState.Missed => "badge badge-danger", SlaState.Met => "badge badge-success", _ => "badge badge-warning" })">
+                    @(slaState switch
+                    {
+                        SlaState.Overdue => $"Quá hạn SLA phản hồi đầu (hạn {slaDue})",
+                        SlaState.Missed => $"Phản hồi đầu trễ SLA (hạn {slaDue})",
+                        SlaState.Met => "Đạt SLA phản hồi đầu",
+                        _ => $"Hạn phản hồi đầu: {slaDue}"
+                    })
+                </span>
+            }
+            @if (Model.IsStaff)
+            {
+                <span><icon name="user-cog" />@(ticket.Assignee is null ? "Chưa phân công" : $"Phụ trách: {ticket.Assignee.DisplayName}")</span>
+            }
+            @if (ticket.Channel == "chat")
+            {
+                <span><icon name="message-square" />Tiếp nhận qua chatbot</span>
+            }
             <span><icon name="calendar" />Tạo ngày @ticket.CreatedAt.ToOffset(local).ToString("dd/MM/yyyy")</span>
             <span><icon name="message-square" />@messages.Count tin nhắn</span>
         </div>
@@ -136,8 +163,25 @@
                         <dl class="ai-facts">
                             <div><dt>Danh mục gợi ý</dt><dd data-field="categoryText"></dd></div>
                             <div><dt>Mức ưu tiên gợi ý</dt><dd><span class="badge" data-field="priority"></span></dd></div>
+                            <div><dt>Cảm xúc của khách</dt><dd data-field="sentiment"></dd></div>
+                            <div><dt>Ý định</dt><dd data-field="intent"></dd></div>
                         </dl>
                         <p class="ai-reason" data-field="reason"></p>
+                        <form asp-action="UpdatePriority" method="post" data-ai-apply-priority hidden
+                              data-confirm="Mức ưu tiên sẽ đổi theo gợi ý của AI và hạn phản hồi (SLA) được tính lại. Thao tác được ghi vào nhật ký hoạt động."
+                              data-confirm-title="Áp dụng mức ưu tiên AI gợi ý?" data-confirm-label="Áp dụng" data-confirm-tone="warning">
+                            <input type="hidden" name="id" value="@ticket.Id" />
+                            <input type="hidden" name="priority" data-field-value="priority" />
+                            <button class="btn btn-secondary btn-sm btn-block" type="submit"><icon name="check" />Áp dụng mức ưu tiên</button>
+                        </form>
+                        <p class="ai-note" data-field="assigneeText" hidden></p>
+                        <form asp-action="UpdateAssignee" method="post" data-ai-apply-assignee hidden
+                              data-confirm="Yêu cầu sẽ được giao cho nhân viên đang có ít việc nhất. Thao tác được ghi vào nhật ký hoạt động."
+                              data-confirm-title="Giao yêu cầu theo gợi ý?" data-confirm-label="Giao việc" data-confirm-tone="warning">
+                            <input type="hidden" name="id" value="@ticket.Id" />
+                            <input type="hidden" name="assigneeId" data-field-value="assigneeId" />
+                            <button class="btn btn-secondary btn-sm btn-block" type="submit"><icon name="user-plus" />Giao cho người được gợi ý</button>
+                        </form>
                         <form asp-action="UpdateCategory" method="post" data-ai-apply hidden
                               data-confirm="Danh mục của yêu cầu sẽ được đổi theo gợi ý của AI. Thao tác được ghi vào nhật ký hoạt động."
                               data-confirm-title="Áp dụng danh mục AI gợi ý?" data-confirm-label="Áp dụng" data-confirm-tone="warning">
@@ -146,7 +190,7 @@
                             <button class="btn btn-primary btn-sm btn-block" type="submit"><icon name="check" />Áp dụng danh mục</button>
                         </form>
                         <p class="ai-note" data-ai-same hidden><icon name="circle-check" class="icon-sm" />Trùng với danh mục hiện tại.</p>
-                        <p class="ai-note"><icon name="info" class="icon-sm" />Hệ thống chưa lưu mức ưu tiên; dùng gợi ý này để sắp xếp thứ tự xử lý.</p>
+                        <p class="ai-note"><icon name="info" class="icon-sm" />Danh mục, ưu tiên, cảm xúc và ý định do AI suy luận; người phụ trách được gợi ý theo số yêu cầu đang mở thật. Chỉ thay đổi khi bạn bấm áp dụng và xác nhận.</p>
                     </div>
                 </div>
                 <div class="ai-section" data-ai-panel="summary">
@@ -177,6 +221,24 @@
                         </div>
                         <button class="btn btn-primary btn-block" type="submit"><icon name="check" />Lưu trạng thái</button>
                     </form>
+                    <form asp-action="UpdateAssignee" method="post" class="form-stack">
+                        <input type="hidden" name="id" value="@ticket.Id" />
+                        <div class="field">
+                            <label class="field-label" for="assignee">Người phụ trách</label>
+                            <select id="assignee" name="assigneeId">
+                                <option value="" selected="@(ticket.AssigneeId is null ? "selected" : null)">Chưa phân công</option>
+                                @foreach (var s in Model.StaffOptions)
+                                {
+                                    <option value="@s.Id" selected="@(ticket.AssigneeId == s.Id ? "selected" : null)">@s.Name · @s.OpenTickets yêu cầu đang mở</option>
+                                }
+                                @if (ticket.Assignee is { } current && Model.StaffOptions.All(s => s.Id != current.Id))
+                                {
+                                    <option value="@current.Id" selected>@current.DisplayName (đã khóa/đổi vai trò)</option>
+                                }
+                            </select>
+                        </div>
+                        <button class="btn btn-secondary btn-block" type="submit">Lưu người phụ trách</button>
+                    </form>
                     <form asp-action="UpdateCategory" method="post" class="form-stack">
                         <input type="hidden" name="id" value="@ticket.Id" />
                         <div class="field">
@@ -189,6 +251,24 @@
                             </select>
                         </div>
                         <button class="btn btn-secondary btn-block" type="submit">Lưu danh mục</button>
+                    </form>
+                    <form asp-action="UpdatePriority" method="post" class="form-stack">
+                        <input type="hidden" name="id" value="@ticket.Id" />
+                        <div class="field">
+                            <label class="field-label" for="priority">Mức ưu tiên</label>
+                            <select id="priority" name="priority">
+                                @if (ticket.Priority is null)
+                                {
+                                    <option value="" selected disabled>Chưa đặt</option>
+                                }
+                                @foreach (var p in CustomerSupportAI.Services.TicketAiService.Priorities)
+                                {
+                                    <option value="@p" selected="@(ticket.Priority == p ? "selected" : null)">@p</option>
+                                }
+                            </select>
+                            <span class="field-hint">Đổi mức ưu tiên sẽ tính lại hạn phản hồi đầu (SLA) từ lúc tạo yêu cầu.</span>
+                        </div>
+                        <button class="btn btn-secondary btn-block" type="submit">Lưu mức ưu tiên</button>
                     </form>
                 </div>
             </section>

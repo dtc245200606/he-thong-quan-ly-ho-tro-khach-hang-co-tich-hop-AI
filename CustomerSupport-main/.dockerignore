@@ -1,0 +1,15 @@
+bin/
+obj/
+verification/
+verification-artifacts/
+App_Data/
+backups/
+publish/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+.vs/
+.vscode/

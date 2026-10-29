@@ -1,0 +1,75 @@
+@model CustomerSupportAI.ViewModels.ChatAdminIndexViewModel
+@{
+    ViewData["Title"] = "Hội thoại chatbot";
+    int Count(string status) => Model.Counts.TryGetValue(status, out var value) ? value : 0;
+    var filters = new (string Value, string Label)[]
+    {
+        ("", "Tất cả"),
+        (ChatStatuses.WaitingStaff, $"Chờ nhân viên ({Count(ChatStatuses.WaitingStaff)})"),
+        (ChatStatuses.StaffReplied, "Nhân viên đã trả lời"),
+        ("bot", "AI đang hỗ trợ"),
+        (ChatStatuses.Closed, "Đã kết thúc")
+    };
+}
+
+<header class="page-header">
+    <div>
+        <span class="eyebrow">Hỗ trợ khách hàng</span>
+        <h1>Hội thoại chatbot</h1>
+        <p class="page-subtitle">Theo dõi các cuộc trò chuyện trên website, tiếp nhận khi AI chuyển cho nhân viên và trả lời khách ngay trong khung chat.</p>
+    </div>
+</header>
+
+<section class="card" aria-labelledby="chats-title">
+    <div class="card-header">
+        <div><h2 id="chats-title">Phiên trò chuyện</h2><p class="card-subtitle">100 phiên có hoạt động gần nhất. Trang tự làm mới mỗi 15 giây.</p></div>
+        <nav class="segmented" aria-label="Lọc theo trạng thái">
+            @foreach (var filter in filters)
+            {
+                <a href="@Url.Action("Index", new { status = filter.Value.Length == 0 ? null : filter.Value })" aria-current="@(Model.Status == filter.Value ? "true" : null)">@filter.Label</a>
+            }
+        </nav>
+    </div>
+    @if (Model.Sessions.Count == 0)
+    {
+        <div class="empty-state">
+            <span class="empty-icon"><icon name="message-square" /></span>
+            <h3>Chưa có hội thoại phù hợp</h3>
+            <p>Khi khách hàng trò chuyện với trợ lý trên website, các phiên sẽ xuất hiện tại đây.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Liên hệ</th>
+                        <th scope="col">Trạng thái</th>
+                        <th scope="col">Yêu cầu</th>
+                        <th scope="col">Tin nhắn gần nhất</th>
+                        <th scope="col">Hoạt động</th>
+                        <th scope="col"><span class="visually-hidden">Thao tác</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Sessions)
+                    {
+                        <tr>
+                            <td>@row.Contact<div class="cell-sub">@row.MessageCount tin nhắn</div></td>
+                            <td>
+                                <span class="@DisplayText.ChatStatusBadge(row.Status)">@row.StatusText</span>
+                                @if (row.Urgent) { <span class="badge badge-danger">Khẩn cấp</span> }
+                            </td>
+                            <td>@if (row.TicketNumber is not null) { <span class="ticket-code">@row.TicketNumber</span> } else { <span class="cell-sub">—</span> }</td>
+                            <td><span class="cell-sub">@(row.LastSender switch { "customer" => "Khách: ", "bot" => "AI: ", "staff" => "Nhân viên: ", _ => "" })</span>@row.LastMessage</td>
+                            <td class="cell-sub">@row.LastActivity</td>
+                            <td><a class="btn btn-secondary btn-sm" href="@Url.Action("Details", new { id = row.Id })">Mở</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+@section Scripts{<script>setTimeout(() => { if (!document.hidden) location.reload(); }, 15000);</script>}

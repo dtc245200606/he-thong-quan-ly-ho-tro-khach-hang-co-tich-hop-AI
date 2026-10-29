@@ -23,7 +23,18 @@ $env:ConnectionStrings__DefaultConnection = 'Data Source=C:\CustomerSupportData\
 $env:AiSettings__StorageDirectory = 'C:\CustomerSupportData\settings'
 ```
 
-Nhập key qua trang Admin /Settings hoặc secret environment của máy chạy; không dán vào source/README. Saved settings ưu tiên môi trường; RemoveKey chặn key môi trường. Tránh đặt nhiều alias key hoặc biến rỗng che alias sau. Giữ Data Protection key ring của identity chạy, nếu chuyển máy không giải mã được thì nhập lại key. Backup DB không tự bao gồm cấu hình Gemini hay key ring.
+Nhập key qua trang Admin /Settings hoặc secret environment của máy chạy; không dán vào source/README. Saved settings ưu tiên môi trường; RemoveKey chặn key môi trường. Tránh đặt nhiều alias key hoặc biến rỗng che alias sau. Backup DB không tự bao gồm cấu hình AI hay key ring.
+
+**Data Protection key ring** (dùng để mã hóa API key, cookie đăng nhập, link đặt lại mật khẩu và link xác nhận email): ứng dụng dùng tên cố định `CustomerSupportAI`, nên đổi thư mục dự án không làm mất key. Trên server hoặc container hãy đặt `DataProtection__KeysDirectory` tới thư mục bền vững (ví dụ `C:\CustomerSupportData\keys` hoặc `/data/keys`) và sao lưu cùng DB; mất key ring thì phải nhập lại API key. Key không giải mã được không làm sập ứng dụng: /Settings hiện cảnh báo để nhập lại.
+
+**Nhà cung cấp AI:**
+
+| Chức năng | Nhà cung cấp | Cấu hình |
+|---|---|---|
+| Trợ lý khách hàng (/Assistant), công cụ AI trong ticket | Gemini | /Settings → Kết nối Gemini, hoặc `Gemini__ApiKey`, `Gemini__Model` |
+| Chatbot website, trợ lý CRM của nhân viên | Groq (ưu tiên) hoặc Gemini | /Settings → Chatbot, hoặc `Groq__ApiKey`/`GROQ_API_KEY`, `Groq__Model`, `Chatbot__Provider` (auto, groq, gemini, mock) |
+
+Sau khi lưu, bấm **Kiểm tra kết nối thực tế** (Gemini) và **Kiểm tra kết nối chatbot**. Các nút này gửi một yêu cầu thật và báo lỗi cụ thể (key sai, hết hạn mức, model sai, timeout). Chế độ `mock` không gọi AI, chỉ dùng cho phát triển/kiểm thử; trợ lý CRM không dùng mock để tránh số liệu giả.
 
 ## Backup SQLite an toàn
 
@@ -54,12 +65,26 @@ Mặc định tạo backups/customer-support-timestamp.db, không ghi đè file 
 
 Các script yêu cầu source repo, SDK và project DatabaseChecks; nếu chỉ copy output publish thì cần mang theo script/tiện ích hoặc build tiện ích riêng trước. Kiểm thử DatabaseChecks chỉ thao tác DB tạm, không restore DB local của người dùng.
 
+## Docker / Docker Compose
+
+`Dockerfile` (build bằng `mcr.microsoft.com/dotnet/sdk:10.0`, chạy bằng `aspnet:10.0` dưới user không phải root) và `docker-compose.yml` lưu mọi trạng thái vào volume `/data`: DB, cấu hình AI đã mã hóa, key ring, outbox mail. `.dockerignore` loại `App_Data`, DB, backup, `.env`, `verification*` khỏi image.
+
+```powershell
+Copy-Item .env.example .env   # điền BootstrapAdmin__Email/Password, tùy chọn Groq__ApiKey, Gemini__ApiKey, SMTP
+docker compose up -d --build  # http://localhost:8080
+docker compose logs -f web
+# Sao lưu volume dữ liệu (DB + settings + keys) ra thư mục hiện tại:
+docker run --rm -v customer-support_customer-support-data:/data -v ${PWD}:/backup alpine tar czf /backup/cs-data.tgz -C /data .
+```
+
+Container chạy `ASPNETCORE_ENVIRONMENT=Production` trên HTTP 8080; đặt reverse proxy có HTTPS phía trước khi public. **Trạng thái kiểm thử:** chưa build được image trên máy phát triển vì Docker Desktop không chạy. Đã kiểm thử tương đương: `dotnet publish -c Release` rồi chạy bản publish ở Production với đúng các biến môi trường của image (DB, settings, key ring trong thư mục dữ liệu riêng), khởi động lại và xác nhận API key vẫn giải mã được (xem verification-results).
+
 ## Publish khi cần triển khai thật (chưa thực hiện public)
 
 ```powershell
 dotnet publish .\CustomerSupportAI.csproj -c Release -o .\publish
 ```
 
-Publish không mang verification/artifacts. Chạy DLL từ working directory publish, đặt ASPNETCORE_ENVIRONMENT=Production và URL/HTTPS phù hợp nền tảng. Nếu dùng reverse proxy cần cấu hình HTTPS/forwarded headers đúng môi trường; project chưa cung cấp cấu hình proxy chuyên biệt. Không tự coi localhost là deployment public.
+Publish không mang verification/artifacts, App_Data, DB hay backup (DefaultItemExcludes trong csproj), nên không làm lộ cấu hình key local. Chạy DLL từ working directory publish, đặt ASPNETCORE_ENVIRONMENT=Production và URL/HTTPS phù hợp nền tảng. Nếu dùng reverse proxy cần cấu hình HTTPS/forwarded headers đúng môi trường; project chưa cung cấp cấu hình proxy chuyên biệt. Không tự coi localhost là deployment public.
 
 Checklist người vận hành: HTTPS và certificate; DB/App_Data/key ring persistent ngoài wwwroot; AllowedHosts theo domain; bootstrap admin secret qua môi trường chỉ khi cần, LocalSetup=false; kiểm tra quyền thư mục; backup/restore thử với DB sao chép; quota và model Gemini; không log key/cookie/chat nhạy cảm; policy lưu dữ liệu; smoke ba role và theo dõi lỗi. Khôi phục mật khẩu/email xác minh, backup theo lịch và HA chưa có trong code.

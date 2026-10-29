@@ -6,7 +6,9 @@
         <h1>Trợ lý thông minh</h1>
         <p class="page-subtitle">Hỏi, tra cứu và chuyển sang nhân viên khi cần hỗ trợ thêm.</p>
     </div>
-    <span class="mode-pill @(Model.IsConfigured ? "is-ai" : "")"><span class="dot"></span><span id="assistant-mode">@(Model.IsConfigured ? "AI đã cấu hình · chờ phản hồi" : "Tra cứu kho hướng dẫn · chưa kết nối AI")</span></span>
+    <span class="mode-pill @(Model.IsConfigured ? "is-ai" : "")"><span class="dot"></span><span id="assistant-mode">@(Model.IsStaff
+        ? (Model.IsConfigured ? $"Trợ lý CRM · {Model.ProviderName} · chỉ đọc dữ liệu" : "Trợ lý CRM · chưa có AI (cần key Groq hoặc Gemini)")
+        : (Model.IsConfigured ? "AI đã cấu hình · chờ phản hồi" : "Tra cứu kho hướng dẫn · chưa kết nối AI"))</span></span>
 </header>
 <div class="chat-layout">
     <section class="card chat-panel assistant-workspace" data-endpoint="@Url.Action("Ask", "Assistant")" aria-label="Khung trò chuyện">
@@ -25,7 +27,14 @@
                 <span class="bot-avatar sm"><icon name="bot" /></span>
                 <div class="chat-bubble chat-greeting">
                     <strong>Xin chào, @User.Identity?.Name</strong>
-                    Tôi có thể hướng dẫn sử dụng hệ thống, tra cứu yêu cầu của bạn và tìm thông tin hỗ trợ. Bạn đang gặp vấn đề gì?
+                    @if (Model.IsStaff)
+                    {
+                        <text>Tôi tra cứu dữ liệu CRM thật cho bạn: thống kê yêu cầu, yêu cầu quá hạn SLA, hồ sơ và lịch sử khách hàng, khối lượng việc của nhân viên, chi tiết một mã CS. Tôi chỉ đọc dữ liệu; mọi thay đổi bạn thực hiện trong màn hình yêu cầu.</text>
+                    }
+                    else
+                    {
+                        <text>Tôi có thể hướng dẫn sử dụng hệ thống, tra cứu yêu cầu của bạn và tìm thông tin hỗ trợ. Bạn đang gặp vấn đề gì?</text>
+                    }
                 </div>
             </div>
             @foreach (var turn in Model.History)
@@ -37,7 +46,7 @@
                     <span class="bot-avatar sm"><icon name="bot" /></span>
                     <div>
                         <div class="chat-bubble" data-md>
-                            <span class="reply-mode">@(turn.Mode == "ai" ? "AI · Gemini" : "Kho hướng dẫn")</span>
+                            <span class="reply-mode">@(turn.Mode switch { "ai" => "AI · Gemini", "crm" => "AI · CRM", "crm-error" => "Trợ lý CRM", _ => "Kho hướng dẫn" })</span>
                             <div class="reply-text">@turn.Reply</div>
                         </div>
                     </div>
@@ -46,9 +55,18 @@
         </div>
         <form id="assistant-csrf" class="visually-hidden">@Html.AntiForgeryToken()</form>
         <div class="prompt-chips" aria-label="Câu hỏi gợi ý">
-            <button class="chip" type="button" data-prompt="Làm thế nào để tạo yêu cầu hỗ trợ?"><icon name="plus" />Tạo yêu cầu</button>
-            <button class="chip" type="button" data-prompt="Trạng thái yêu cầu của tôi là gì?"><icon name="clock" />Theo dõi trạng thái</button>
-            <button class="chip" type="button" data-prompt="Tôi gặp vấn đề đăng nhập tài khoản"><icon name="key-round" />Hỗ trợ tài khoản</button>
+            @if (Model.IsStaff)
+            {
+                <button class="chip" type="button" data-prompt="Tổng quan yêu cầu hỗ trợ trong 30 ngày qua"><icon name="chart-column" />Tổng quan 30 ngày</button>
+                <button class="chip" type="button" data-prompt="Những yêu cầu nào đang quá hạn SLA?"><icon name="clock" />Quá hạn SLA</button>
+                <button class="chip" type="button" data-prompt="Nhân viên nào đang ít việc nhất để giao yêu cầu chưa phân công?"><icon name="users" />Gợi ý phân công</button>
+            }
+            else
+            {
+                <button class="chip" type="button" data-prompt="Làm thế nào để tạo yêu cầu hỗ trợ?"><icon name="plus" />Tạo yêu cầu</button>
+                <button class="chip" type="button" data-prompt="Trạng thái yêu cầu của tôi là gì?"><icon name="clock" />Theo dõi trạng thái</button>
+                <button class="chip" type="button" data-prompt="Tôi gặp vấn đề đăng nhập tài khoản"><icon name="key-round" />Hỗ trợ tài khoản</button>
+            }
         </div>
         <form id="assistant-form" class="composer">
             <label class="visually-hidden" for="assistant-input">Câu hỏi của bạn</label>
@@ -62,7 +80,7 @@
     </section>
     <aside class="stack" aria-label="Thông tin hỗ trợ">
         <section class="card">
-            <div class="card-header"><div><h2>Hướng dẫn liên quan</h2><p class="card-subtitle">Nguồn được dùng cho câu trả lời</p></div></div>
+            <div class="card-header"><div><h2>@(Model.IsStaff ? "Dữ liệu CRM đã tra cứu" : "Hướng dẫn liên quan")</h2><p class="card-subtitle">@(Model.IsStaff ? "Số liệu trong câu trả lời lấy từ các mục này" : "Nguồn được dùng cho câu trả lời")</p></div></div>
             <div class="card-body">
                 <div id="assistant-sources" class="source-list">
                     <p class="muted">Nguồn hướng dẫn phù hợp sẽ xuất hiện sau câu trả lời.</p>
@@ -85,7 +103,7 @@
                 <a class="btn btn-secondary btn-block" asp-controller="Tickets" asp-action="Index"><icon name="inbox" />Mở hàng đợi</a>
             }
         </section>
-        <p class="field-hint"><icon name="info" class="icon-sm inline-icon" /> Khi dùng AI, câu hỏi, hội thoại gần đây và tóm tắt yêu cầu của bạn được gửi đến Gemini để tạo câu trả lời.</p>
+        <p class="field-hint"><icon name="info" class="icon-sm inline-icon" /> @(Model.IsStaff ? "AI chỉ nhận phần dữ liệu CRM cần cho câu hỏi (email, số điện thoại đã được ẩn) và không thể sửa dữ liệu. AI có thể sai: đối chiếu với màn hình yêu cầu trước khi hành động." : "Khi dùng AI, câu hỏi, hội thoại gần đây và tóm tắt yêu cầu của bạn được gửi đến Gemini để tạo câu trả lời.")</p>
     </aside>
 </div>
 @section Scripts{<script src="~/js/assistant.js" asp-append-version="true"></script>}

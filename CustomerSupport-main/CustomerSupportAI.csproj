@@ -4,11 +4,14 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Never scan or publish local data, test output or secrets (App_Data holds encrypted API keys and the dev outbox). -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);verification/**;verification-artifacts/**;App_Data/**;backups/**;publish/**;*.db;*.db-shm;*.db-wal</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="verification/**/*.cs" />
     <Content Remove="verification/**;verification-artifacts/**" />
+    <None Update="Prompts/*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
   </ItemGroup>
 

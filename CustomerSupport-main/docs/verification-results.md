@@ -1,5 +1,25 @@
 # Kết quả verification thực tế
 
+## Lần chạy 29/10/2026 (sau khi thêm chatbot, Groq, SLA, xác nhận email, phân công, trợ lý CRM, ràng buộc DB)
+
+.NET SDK 10.0.401 trên Windows 11. Mọi bộ chạy trên DB/settings tạm; DB thật không bị sửa.
+
+| Lệnh / kiểm tra | Kết quả thực tế | Phạm vi |
+|---|---|---|
+| `dotnet build CustomerSupportAI.csproj` | **Thành công, 0 warning, 0 error** | |
+| ServiceChecks | **33 PASS**, 0 fail | Gemini (giả lập HTTP), mã hóa key, key không giải mã được không làm sập |
+| ChatbotChecks | **74 PASS**, 0 fail | 20 tiêu chí chatbot, xác nhận email, SLA, Groq/Gemini (giả lập HTTP), trợ lý CRM (quyền, số liệu khớp DB, không ghi được, audit), trigger ràng buộc, xóa nhân viên → bỏ phân công, dữ liệu mẫu + backfill, nâng cấp DB cũ |
+| HttpChecks (server thật, port 5181) | **110 PASS**, 0 fail | Toàn bộ kiểm thử cũ + chatbot API, phân quyền admin API 401/403, rate limit, xác nhận email qua outbox, SLA, đổi ưu tiên, phân công, trợ lý CRM không có key |
+| BrowserChecks (Edge headless) | **28 PASS**, 0 fail | Desktop 1440px và mobile 390px: không tràn ngang, widget chat mở/trả lời/nằm gọn, console chat, công cụ AI ticket |
+| DatabaseChecks | **8 PASS** | Backup/restore trên DB tạm |
+| Publish Release + chạy Production | **Đạt** | Không có App_Data/DB/settings trong bản publish; key ring trong thư mục dữ liệu; sau khởi động lại key vẫn giải mã được; ticket không tồn tại → 404; trang lỗi không lộ stack trace |
+| Docker image | **Chưa kiểm thử** | Docker Desktop không chạy trên máy phát triển |
+| Groq/Gemini với key thật cho chatbot và trợ lý CRM | **Chưa kiểm thử tự động** | Cần key của người dùng; dùng nút "Kiểm tra kết nối chatbot" ở /Settings |
+
+Lỗi phát hiện nhờ kiểm thử trong lần này: truy vấn danh sách nhân viên phụ trách không dịch được sang SQL (500 ở trang ticket); `dotnet publish` lỗi do quét thư mục artifacts và có thể chép `App_Data/*.json` (key đã mã hóa) vào bản publish; key Data Protection mất sau khi khởi động lại container. Cả ba đã sửa và có kiểm thử.
+
+## Lần chạy 08/10/2026
+
 Ngày chạy **08/10/2026, Asia/Saigon (UTC+07)**, khoảng 00:15–00:20. .NET SDK 10.0.102 trên Windows. Đây là kết quả lần chạy trong phiên hoàn thiện tài liệu, không phải kết quả giả định và không phải minh chứng đã chạy ba vòng prompt.
 
 | Lệnh / kiểm tra | Actual result | Phạm vi / giới hạn |

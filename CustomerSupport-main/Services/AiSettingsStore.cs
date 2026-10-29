@@ -22,13 +22,22 @@ public sealed class AiSettingsStore
         protector = protection.CreateProtector("CustomerSupport.Gemini.Settings.v1");
         path = Path.Combine(configuration["AiSettings:StorageDirectory"] ?? Path.Combine(environment.ContentRootPath, "App_Data"), "gemini-settings.json");
     }
+    /// <summary>True when a saved key exists but cannot be decrypted (key ring from another machine or folder).</summary>
+    public bool SavedKeyUnreadable { get; private set; }
     public (string Model, string? Key) Read()
     {
         lock (sync)
         {
             var saved = File.Exists(path) ? JsonSerializer.Deserialize<StoredSettings>(File.ReadAllText(path)) : null;
-            var key = saved?.ProtectedKey is { Length: > 0 } encrypted ? protector.Unprotect(encrypted)
-                : saved?.DisableEnvironmentKey == true ? null : configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"] ?? configuration["GOOGLE_API_KEY"];
+            SavedKeyUnreadable = false;
+            string? key;
+            if (saved?.ProtectedKey is { Length: > 0 } encrypted)
+            {
+                // An unreadable key must not crash every page that checks the AI status: treat it as missing.
+                try { key = protector.Unprotect(encrypted); }
+                catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or FormatException) { key = null; SavedKeyUnreadable = true; }
+            }
+            else key = saved?.DisableEnvironmentKey == true ? null : configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"] ?? configuration["GOOGLE_API_KEY"];
             return (saved?.Model ?? configuration["Gemini:Model"] ?? "gemini-3.8-flash", key);
         }
     }
